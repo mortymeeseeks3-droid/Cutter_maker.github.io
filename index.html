@@ -28,10 +28,12 @@ summary{cursor:pointer;color:#aaa;font-size:12px;margin:4px 0}
 #bar button{padding:7px 12px;background:#1a1a00;color:#d6d600;border:1px solid #d6d600;font-weight:bold;font-size:13px}
 #bar button:hover{background:#d6d600;color:#111}
 #status{position:absolute;left:8px;top:10px;right:260px;font-size:12px;color:#bbb;pointer-events:none;text-shadow:0 1px 2px #000}
-#report{position:absolute;left:8px;bottom:8px;right:8px;max-width:520px;max-height:45%;overflow:auto;background:rgba(0,0,0,.85);border:1px solid #d6d600;border-radius:6px;padding:8px 10px;font-size:12px;line-height:1.5;color:#ddd;cursor:pointer;z-index:6}
+#report{position:absolute;left:8px;bottom:8px;right:8px;max-width:560px;max-height:60%;overflow:auto;padding-right:26px!important;background:rgba(0,0,0,.85);border:1px solid #d6d600;border-radius:6px;padding:8px 10px;font-size:12px;line-height:1.5;color:#ddd;cursor:pointer;z-index:6}
 .ck{flex-direction:row;align-items:center;gap:5px;font-size:12px;color:#ddd}
 .ck input{width:auto;margin:0}
 #bar button.on{background:#d6d600;color:#111}
+#report.c{max-height:22px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;padding-top:4px!important;padding-bottom:4px!important}
+#report .rx{position:absolute;right:8px;top:3px;color:#d6d600;font-size:13px}
 #hint{font-size:11px;color:#777;margin-top:10px}
 </style>
 </head>
@@ -128,6 +130,7 @@ summary{cursor:pointer;color:#aaa;font-size:12px;margin:4px 0}
   <div id="report" hidden></div>
   <div id="bar">
     <button id="undo" title="Undo (Ctrl+Z)">↶</button>
+    <button id="fitBtn" title="Fit the whole design to the screen (F)">Fit</button>
     <button id="dimBtn" title="Show/hide dimensions (D)">Dims</button>
     <button id="importPdf" title="Import a cutter profile from a PDF (or drop a PDF on the canvas)">Import PDF</button><input type="file" id="pdfIn" accept=".pdf,application/pdf" hidden>
     <button id="downloadSvg">SVG</button>
@@ -213,6 +216,11 @@ function polyIn(P, px, py, e) {
   }
   return e<0 ? (ins||md<-e) : (ins&&md>e);
 }
+function contentBox() {
+  let x0=0,y0=0,x1=S.mw,y1=S.mh;
+  for (const s of S.placed) { x0=Math.min(x0,s.x); y0=Math.min(y0,s.y); x1=Math.max(x1,s.x+s.w); y1=Math.max(y1,s.y+s.h); }
+  return {x0,y0,x1,y1,w:x1-x0,h:y1-y0};
+}
 const prof = () => S.profileType==="path" ? {type:"path",x:0,y:0,w:S.mw,h:S.mh,segs:S.profilePath,closed:true} : ({ type:S.profileType==="rect"?"rect":"oval", x:0, y:0, w:S.mw, h:S.mh, r:S.profileR });
 
 /* Dashed line: keep the tie exact, adjust the cut so the line starts AND ends on a cut */
@@ -261,11 +269,11 @@ function validate() {
 
 /* ───────── Drawing ───────── */
 function rs() {
-  const d=devicePixelRatio||1, W=c.clientWidth, H=c.clientHeight, padX=28, padT=48, padB=28;
+  const d=devicePixelRatio||1, W=c.clientWidth, H=c.clientHeight, padX=34, padT=52, rp=$("report"), padB=rp.hidden?34:rp.offsetHeight+30, B=contentBox();
   c.width=W*d; c.height=H*d;
-  S.scale = Math.max(0.01, Math.min((W-2*padX)/S.mw, (H-padT-padB)/S.mh));
-  S.ox = (W-S.mw*S.scale)/2;
-  S.oy = padT + (H-padT-padB-S.mh*S.scale)/2;
+  S.scale = Math.max(0.01, Math.min((W-2*padX)/B.w, (H-padT-padB)/B.h));
+  S.ox = (W-B.w*S.scale)/2 - B.x0*S.scale;
+  S.oy = padT + (H-padT-padB-B.h*S.scale)/2 - B.y0*S.scale;
   dr();
 }
 window.onresize = rs;
@@ -349,6 +357,7 @@ function drawDims() {
 }
 function setDims(v) { dim.on=v; $("dimBtn").classList.toggle("on",v); dr(); }
 $("dimBtn").onclick = () => setDims(!dim.on);
+$("fitBtn").onclick = () => rs();
 [["dSize","size"],["dGap","gap"],["dRad","rad"],["dSel","sel"]].forEach(([id,k]) => $(id).onchange = () => { dim[k]=$(id).checked; if (!dim.on) setDims(true); else dr(); });
 
 function dr() {
@@ -581,6 +590,7 @@ addEventListener("keydown", e => {
   if (mod && k.toLowerCase()==="z" && !typing) { e.preventDefault(); undo(); return; }
   if (typing) { if (k==="Escape") document.activeElement.blur(); return; }
   if (k.toLowerCase()==="d" && !mod) { setDims(!dim.on); return; }
+  if (k.toLowerCase()==="f" && !mod) { rs(); return; }
   if (sel<0) return;
   const s=S.placed[sel];
   if (k==="Delete"||k==="Backspace") { e.preventDefault(); delSel(); }
@@ -602,7 +612,8 @@ function buildSvg() {
     if (s.type==="dash") { const d=fitDash(s); g += `<line x1="${R(s.x)}" y1="${R(s.y)}" x2="${R(s.x+s.w)}" y2="${R(s.y+s.h)}" stroke-dasharray="${R(d.cut)} ${R(d.tie)}"/>`; }
     else g += `<path d="${shapeD(s)}"/>`;
   }
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${S.mw}mm" height="${S.mh}mm" viewBox="0 0 ${S.mw} ${S.mh}"><g fill="none" stroke="#000" stroke-width="0.1">${g}</g></svg>`;
+  const B=contentBox(), ext=B.x0<0||B.y0<0||B.x1>S.mw||B.y1>S.mh, mg=ext?0.5:0, vx=R(B.x0-mg), vy=R(B.y0-mg), vw=R(B.w+2*mg), vh=R(B.h+2*mg);
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${ext?vw:S.mw}mm" height="${ext?vh:S.mh}mm" viewBox="${ext?vx+" "+vy+" "+vw+" "+vh:"0 0 "+S.mw+" "+S.mh}"><g fill="none" stroke="#000" stroke-width="0.1">${g}</g></svg>`;
 }
 $("downloadSvg").onclick = () => {
   const url = URL.createObjectURL(new Blob([buildSvg()], {type:"image/svg+xml"}));
@@ -880,15 +891,15 @@ function pdfInit() {
   pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([u], {type:"text/javascript"}));
   pdfReady = true;
 }
-function showReport(html) { const r=$("report"); r.innerHTML=html; r.hidden=false; }
-$("report").onclick = () => { $("report").hidden = true; };
+function showReport(html) { const r=$("report"); r.innerHTML='<span class="rx">✕</span>'+html; r.hidden=false; r.classList.add("c"); rs(); }
+$("report").onclick = e => { const r=$("report"); if (e.target.classList.contains("rx")) { r.hidden=true; rs(); } else r.classList.toggle("c"); };
 async function importPdf(file) {
   try {
     pdfInit();
     showReport("Reading PDF…");
     const pdf = await pdfjsLib.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise;
     let pn = 1;
-    if (pdf.numPages>1) { const a=parseInt(prompt(`This PDF has ${pdf.numPages} pages. Import which page?`,"1")); if (!a) { $("report").hidden=true; return; } pn=Math.min(Math.max(1,a),pdf.numPages); }
+    if (pdf.numPages>1) { const a=parseInt(prompt(`This PDF has ${pdf.numPages} pages. Import which page?`,"1")); if (!a) { $("report").hidden=true; rs(); return; } pn=Math.min(Math.max(1,a),pdf.numPages); }
     const page=await pdf.getPage(pn), ol=await page.getOperatorList(), v=page.view, mm=25.4/72*(page.userUnit||1), rot=((page.rotate%360)+360)%360;
     const res = recognizeShapes(extractPaths(ol,pdfjsLib.OPS,mm,rot), (v[2]-v[0])*mm, (v[3]-v[1])*mm);
     if (!res) { showReport("No vector outlines found on that page. Scanned or raster PDFs can't be read as cutter profiles."); return; }
@@ -920,7 +931,7 @@ function applyImport(res, pn, pages) {
   if (c.path||res.info.custom) L.push(`⚠ ${c.path} shape(s) aren't a plain rectangle/circle/oval (rotated, elliptical corners, free-form…). Imported as exact custom outlines: they move and export exactly, but size/radius fields don't apply.`);
   if (res.info.dashedClosed) L.push(`⚠ ${res.info.dashedClosed} dashed closed shape(s) were imported as solid outlines.`);
   if (res.info.ignored) L.push(`${res.info.ignored} tiny/background item(s) ignored.`);
-  L.push(`<span style="color:#888">Click a shape to see its exact values. Tap here to dismiss.</span>`);
+  L.push(`<span style="color:#888">Tap this bar to expand/collapse · ✕ to close. Click a shape for its exact values.</span>`);
   showReport(L.join("<br>"));
 }
 $("importPdf").onclick = () => $("pdfIn").click();
@@ -956,12 +967,13 @@ function pdfRR(ops, P, x, y, w, h, tl, tr, br, bl) {
 document.getElementById("downloadPdf").onclick = () => {
   const margin = 1.5;
   const mm2pt = 72/25.4;
-  const pageW = S.mw + margin * 2;
-  const pageH = S.mh + margin * 2;
+  const CB = contentBox();
+  const pageW = CB.w + margin * 2;
+  const pageH = CB.h + margin * 2;
   const pW = pageW * mm2pt;
   const pH = pageH * mm2pt;
-  const ox = margin * mm2pt;
-  const oy = margin * mm2pt;
+  const ox = (margin - CB.x0) * mm2pt;
+  const oy = (margin - CB.y0) * mm2pt;
   const K = 0.5523;
 
   // PDF origin is bottom-left, Y increases upward.
@@ -1117,15 +1129,17 @@ document.getElementById("downloadPdfAnnotated").onclick = () => {
   const P0=prof();
   const info=[{name:"Outer Profile",hex:BL,...describe(P0,true)}].concat(sh.map((s,i)=>({name:"Shape "+(i+2),hex:DIMCOL[i%DIMCOL.length],...describe(s,false)})));
 
-  /* layout (mm): top half white = drawing, bottom half black = key */
+  /* layout (mm): LEFT half black = key, RIGHT half white = drawing (landscape page) */
   const padL=24,padR=24,padT=34,padB=22,bIn=5;
-  const drawH=S.mh+padT+padB, pageW=Math.max(S.mw+padL+padR,130);
-  const cols=pageW>=220?2:1, kPad=bIn+8, kInner=pageW-2*kPad, colW=(kInner-(cols-1)*6)/cols;
+  const CB=contentBox(), bx0=CB.x0, by0=CB.y0, drawW=CB.w+padL+padR, drawH=CB.h+padT+padB;
+  let halfW=Math.max(drawW,120);
+  const cols=halfW>=220?2:1, kPad=bIn+8, ky0=bIn+6;
   const rows=info.map(r=>({...r,h:6.8+(r.rad?3.4:0)})), per=Math.ceil(rows.length/cols);
   const colRows=[...Array(cols)].map((_,c)=>rows.slice(c*per,(c+1)*per));
-  const keyHead=18, keyNeed=keyHead+Math.max(...colRows.map(r=>r.reduce((a,b)=>a+b.h,0)))+bIn+6;
-  const H2=Math.max(drawH,keyNeed), pageH=H2*2, pH=pageH*m, pW=pageW*m;
-  const ox=(pageW-S.mw)/2, oy=padT+(H2-drawH)/2;
+  const keyHead=18, keyNeed=ky0+keyHead+Math.max(...colRows.map(r=>r.reduce((a,b)=>a+b.h,0)))+bIn+3;
+  const pageH=Math.max(drawH,keyNeed); halfW=Math.max(halfW,pageH/2);          // never narrower than tall
+  const pageW=halfW*2, pH=pageH*m, pW=pageW*m, kInner=halfW-2*kPad, colW=(kInner-(cols-1)*6)/cols;
+  const ox=halfW+(halfW-CB.w)/2-CB.x0, oy=padT+(pageH-drawH)/2-CB.y0;
   const gx=v=>(ox+v)*m, gy=v=>(oy+v)*m, Pp=(a,b)=>f(a)+" "+f(pH-b);
   const ops=[];
 
@@ -1160,7 +1174,7 @@ document.getElementById("downloadPdfAnnotated").onclick = () => {
   const ov=(a,b,p)=>a[0]<b[2]+p&&a[2]>b[0]-p&&a[1]<b[3]+p&&a[3]>b[1]-p;
   function placeLabels() {
     Q.sort((a,b)=>a.prio-b.prio);
-    const placed=[], lim=[(bIn+1.5)*m,(bIn+1.5)*m,(pageW-bIn-1.5)*m,(H2-2)*m];
+    const placed=[], lim=[(halfW+1.5)*m,(bIn+1.5)*m,(pageW-bIn-1.5)*m,(pageH-bIn-1.5)*m];
     const busy=r=>obst.some(o=>ov(o,r,1))||placed.some(o=>ov(o,r,1.2));
     for (const L of Q) {
       let pick=null, sz=L.sz;
@@ -1189,12 +1203,12 @@ document.getElementById("downloadPdfAnnotated").onclick = () => {
     }
   }
 
-  /* 1 ▸ page: white top half, black bottom half, square process-blue border */
-  ops.push(`1 1 1 rg 0 ${f(pH/2)} ${f(pW)} ${f(pH/2)} re f`);
-  ops.push(`0 0 0 rg 0 0 ${f(pW)} ${f(pH/2)} re f`);
+  /* 1 ▸ page: black left half, white right half, square process-blue border */
+  ops.push(`1 1 1 rg ${f(halfW*m)} 0 ${f(halfW*m)} ${f(pH)} re f`);
+  ops.push(`0 0 0 rg 0 0 ${f(halfW*m)} ${f(pH)} re f`);
   ops.push(`${hex(BC)} RG 1.5 w ${f(bIn*m)} ${f(bIn*m)} ${f((pageW-2*bIn)*m)} ${f((pageH-2*bIn)*m)} re S`);
-  txt("CUTTER PROFILE",(bIn+8)*m,13.5*m,15,"0.07 0.09 0.13",true);
-  txt(`${d2(S.mw)} x ${d2(S.mh)}mm   ·   ${n} cut${n===1?"":"s"}`,(bIn+8)*m,19*m,7.5,"0.36 0.40 0.46",false);
+  txt("CUTTER PROFILE",(halfW+8)*m,13.5*m,15,"0.07 0.09 0.13",true);
+  txt(`${d2(S.mw)} x ${d2(S.mh)}mm   ·   ${n} cut${n===1?"":"s"}`,(halfW+8)*m,19*m,7.5,"0.36 0.40 0.46",false);
   for (let i=0;i<8;i++) { ops.push(`${hex(DIMCOL[i])} rg`); ellp((pageW-bIn-9-i*4.6)*m,13*m,1.45*m,1.45*m,"f"); }
 
   /* 2 ▸ profile board + pale coloured sections */
@@ -1251,9 +1265,9 @@ document.getElementById("downloadPdfAnnotated").onclick = () => {
   /* 5 ▸ outer profile dimensions (process blue) */
   const circ=S.profileType==="circle";
   const ext=(x1,y1,x2,y2)=>thin(x1,y1,x2,y2,hex(BC),0.35);
-  ext(gx(0),gy(-1),gx(0),gy(-11.5)); ext(gx(S.mw),gy(-1),gx(S.mw),gy(-11.5));
-  dimH(gx(0),gx(S.mw),gy(-10),(circ?"Ø":"")+d2(S.mw)+"mm",BL,0,7.5,0.8,BC,0);
-  if (!circ) { ext(gx(-1),gy(0),gx(-11.5),gy(0)); ext(gx(-1),gy(S.mh),gx(-11.5),gy(S.mh)); dimV(gy(0),gy(S.mh),gx(-10),d2(S.mh)+"mm",BL,0,7.5,0.8,BC,0); }
+  ext(gx(0),gy(-1),gx(0),gy(by0-11.5)); ext(gx(S.mw),gy(-1),gx(S.mw),gy(by0-11.5));
+  dimH(gx(0),gx(S.mw),gy(by0-10),(circ?"Ø":"")+d2(S.mw)+"mm",BL,0,7.5,0.8,BC,0);
+  if (!circ) { ext(gx(-1),gy(0),gx(bx0-11.5),gy(0)); ext(gx(-1),gy(S.mh),gx(bx0-11.5),gy(S.mh)); dimV(gy(0),gy(S.mh),gx(bx0-10),d2(S.mh)+"mm",BL,0,7.5,0.8,BC,0); }
   if (S.profileType==="rect") {
     const fr=fitR(S.mw,S.mh,S.profileR);
     for (const [k,cx,cy,sx,sy] of corners({x:0,y:0,w:S.mw,h:S.mh})) {
@@ -1264,7 +1278,6 @@ document.getElementById("downloadPdfAnnotated").onclick = () => {
   late.forEach(fn=>fn()); placeLabels();
 
   /* 6 ▸ colour-coded key on the black bottom half */
-  const ky0=H2+6;
   txt("MEASUREMENTS KEY",kPad*m,(ky0+6)*m,11,"1 1 1",true);
   DIMCOL.slice(0,6).forEach((c,i)=>{ ops.push(`${hex(c)} rg`); rrp((kPad+i*7.5)*m,(ky0+8.6)*m,6.2*m,1.1*m,0.5*m,"f"); });
   colRows.forEach((rs,c)=>{
