@@ -272,7 +272,7 @@ window.onresize = rs;
 
 /* ───────── On-screen dimensions (toggle: Dims button or D key) ───────── */
 const dim = { on:false, size:true, gap:true, rad:true, sel:false };
-const DIMCOL = ["#ff5c5c","#4cd964","#c77dff","#ffa94d","#2ed3d3","#f2e94e","#ff7eb6","#9aa0a6"];
+const DIMCOL = ["#ff5e5b","#ff9f1c","#ffd93d","#9be564","#2ee6a6","#3ddcff","#a06bff","#ff5cc8","#ffb38a","#19c3a0","#ff8fb1","#d4f23a"];
 function drawDims() {
   const sc=S.scale, X=v=>S.ox+v*sc, Y=v=>S.oy+v*sc;
   const fm=v=>String(Math.round(v*100)/100);
@@ -1067,372 +1067,199 @@ document.getElementById("downloadPdf").onclick = () => {
 
 
 /* ── Annotated PDF export ── */
+/* ───────── "PDF + Dims": colour-coded presentation sheet ───────── */
+function computeGaps() {
+  const B = S.placed.map(s => ({x1:s.x,y1:s.y,x2:s.x+s.w,y2:s.y+s.h})), out=[], seen=new Set();
+  const edgeAt=(ax,sg,mid)=>{
+    if (S.profileType==="circle"||S.profileType==="oval") {
+      const a=S.mw/2,b=S.mh/2;
+      if (ax===0) { const h=a*Math.sqrt(Math.max(1-((mid-b)/b)**2,0)); return sg>0?a+h:a-h; }
+      const h=b*Math.sqrt(Math.max(1-((mid-a)/a)**2,0)); return sg>0?b+h:b-h;
+    }
+    return ax===0?(sg>0?S.mw:0):(sg>0?S.mh:0);
+  };
+  B.forEach((a,i) => { for (const ax of [0,1]) for (const sg of [1,-1]) {
+    const lo=ax?"y1":"x1", hi=ax?"y2":"x2", pl=ax?"x1":"y1", ph=ax?"x2":"y2", from=sg>0?a[hi]:a[lo];
+    let best=null;
+    B.forEach((b,j) => {
+      if (j===i) return;
+      const d=sg>0?b[lo]-from:from-b[hi]; if (d<-1e-6) return;
+      const span=Math.min(a[ph],b[ph])-Math.max(a[pl],b[pl]), thin=(a[ph]-a[pl]<1e-6)||(b[ph]-b[pl]<1e-6);
+      if (!(span>1e-6||(thin&&span>=-1e-6))) return;
+      if (!best||d<best.d) best={d,mid:(Math.max(a[pl],b[pl])+Math.min(a[ph],b[ph]))/2};
+    });
+    let g,mid;
+    if (best) { g=best.d; mid=best.mid; } else { mid=(a[pl]+a[ph])/2; const e=edgeAt(ax,sg,mid); g=sg>0?e-from:from-e; }
+    if (!(g>0.05)) return;
+    const to=from+sg*g, key=`${ax}|${R(Math.min(from,to))}|${R(Math.max(from,to))}|${R(mid)}`;
+    if (seen.has(key)) return; seen.add(key); out.push({ax,from,to,mid,g});
+  } });
+  return out;
+}
+
 document.getElementById("downloadPdfAnnotated").onclick = () => {
-  const mm2pt = 72/25.4;
-  const K = 0.5523;
+  const m=72/25.4, f=v=>(+v).toFixed(3), d2=v=>(Math.round(v*100)/100).toFixed(2);
+  const sh=S.placed, n=sh.length, BC="#4da3ff", GC="#ffffff";
+  const hex=h=>[1,3,5].map(i=>(parseInt(h.substr(i,2),16)/255).toFixed(3)).join(" ");
+  const WD={" ":278,".":278,":":278,",":278,"(":333,")":333,"-":333,"/":278,"x":500,"m":833,"R":722,"T":611,"L":556,"B":722,"O":778,"u":556,"t":278,"e":556,"r":333,"P":667,"o":556,"f":278,"i":222,"l":222,"S":667,"h":556,"a":556,"p":556,"M":833,"E":667,"A":667,"U":722,"K":667,"Y":667,"N":722,"C":722,"D":722,"G":778,"I":278,"W":944,"H":722,"n":556,"s":500,"c":500,"d":556,"g":556,"k":500,"b":556,"y":500,"w":722,"v":500,"z":500,"j":222,"q":556,"·":278,"Ø":778};
+  const tw=(s,sz,b)=>{ let t=0; for (const c of s) t+=(WD[c]||556); return t*sz/1000*(b?1.06:1); };
+  const esc=s=>s.replace(/[\\()]/g,"\\$&").replace(/Ø/g,"\\330").replace(/·/g,"\\267");
 
-  // Page: generous margin for outer dim lines, no table needed
-  const annMar = 16;
-  const pageW   = S.mw + annMar * 2;
-  const pageH   = S.mh + annMar * 2;
-  const pW = pageW * mm2pt;
-  const pH = pageH * mm2pt;
-  const ox = annMar * mm2pt;   // profile left edge in pt
-  const oy = annMar * mm2pt;   // profile bottom edge in pt (PDF Y up)
+  /* what each shape is called in the key */
+  const rads=(r,all)=>{ const o=[["TL",r.tl],["TR",r.tr],["BR",r.br],["BL",r.bl]].filter(a=>all||a[1]>0.005); return o.length?o.map(a=>`${a[0]} ${d2(a[1]||0)}`).join("  ·  "):""; };
+  const describe=(s,outer)=>{
+    if (s.type==="rect") { const fr=fitR(s.w,s.h,s.r||{}); return {size:`${d2(s.w)} x ${d2(s.h)}mm`, rad:rads(fr,outer&&fr&&(fr.tl+fr.tr+fr.br+fr.bl>0.005))}; }
+    if (s.type==="circle") return {size:`Ø${d2(s.w)}mm`,rad:""};
+    if (s.type==="oval") return {size:`${d2(s.w)} x ${d2(s.h)}mm  (oval)`,rad:""};
+    if (s.type==="dash") { const q=fitDash(s); return {size:`Line ${d2(s.orient==="h"?s.w:s.h)}mm`,rad:`cut ${d2(q.cut)}  ·  tie ${d2(q.tie)}`}; }
+    return {size:`${d2(s.w)} x ${d2(s.h)}mm  (custom outline)`,rad:""};
+  };
+  const P0=prof();
+  const info=[{name:"Outer Profile",hex:BC,...describe(P0,true)}].concat(sh.map((s,i)=>({name:"Shape "+(i+2),hex:DIMCOL[i%DIMCOL.length],...describe(s,false)})));
 
-  // Profile right/top in pt
-  const pr = ox + S.mw * mm2pt;
-  const pt_ = oy + S.mh * mm2pt;
+  /* page layout (mm) */
+  const padL=24,padR=24,padT=34,padB=22,bIn=5;
+  const drawH=S.mh+padT+padB, pageW=Math.max(S.mw+padL+padR,130);
+  const cols=pageW>=220?2:1, kPad=bIn+6, kInner=pageW-2*kPad-14, colW=(kInner-(cols-1)*6)/cols;
+  const rows=info.map(r=>({...r,h:6.8+(r.rad?3.4:0)})), per=Math.ceil(rows.length/cols);
+  const colRows=[...Array(cols)].map((_,c)=>rows.slice(c*per,(c+1)*per));
+  const keyHead=18, keyNeed=keyHead+Math.max(...colRows.map(r=>r.reduce((a,b)=>a+b.h,0)))+8;
+  const keyH=Math.max(keyNeed,drawH*0.9), pageH=drawH+keyH, pH=pageH*m, ox=(pageW-S.mw)/2, oy=padT;
+  const gx=v=>(ox+v)*m, gy=v=>(oy+v)*m, Pp=(a,b)=>f(a)+" "+f(pH-b);
+  const ops=[];
 
-  function p2(x, y) { return x.toFixed(3) + ' ' + (pH - y).toFixed(3); }
+  /* drawing primitives (pt, y measured down from the page top) */
+  const rrp=(x,y,w,h,r,p)=>{ pdfRR(ops,Pp,x,y,w,h,r,r,r,r); ops[ops.length-1]="h "+p; };
+  const ellp=(cx,cy,rx,ry,p)=>{ const k=0.5523,a=rx*k,b=ry*k;
+    ops.push(`${Pp(cx+rx,cy)} m ${Pp(cx+rx,cy-b)} ${Pp(cx+a,cy-ry)} ${Pp(cx,cy-ry)} c ${Pp(cx-a,cy-ry)} ${Pp(cx-rx,cy-b)} ${Pp(cx-rx,cy)} c ${Pp(cx-rx,cy+b)} ${Pp(cx-a,cy+ry)} ${Pp(cx,cy+ry)} c ${Pp(cx+a,cy+ry)} ${Pp(cx+rx,cy+b)} ${Pp(cx+rx,cy)} c h ${p}`); };
+  const shapePath=(s,p)=>{
+    if (s.type==="rect") { const r=s.r||{}; pdfRR(ops,Pp,gx(s.x),gy(s.y),s.w*m,s.h*m,(r.tl||0)*m,(r.tr||0)*m,(r.br||0)*m,(r.bl||0)*m); ops[ops.length-1]="h "+p; }
+    else if (s.type==="path") { pdfPath(ops,Pp,s,ox*m,oy*m,m); if (s.closed) ops[ops.length-1]="h "+p; }
+    else ellp(gx(s.x+s.w/2),gy(s.y+s.h/2),s.w/2*m,s.h/2*m,p);
+  };
+  const txt=(str,x,y,sz,hx,bold)=>ops.push(`${hex(hx)} rg BT /${bold?"F2":"F1"} ${sz} Tf 1 0 0 1 ${f(x)} ${f(pH-y)} Tm (${esc(str)}) Tj ET`);
+  const lbl=(str,cx,cy,hx,rot,sz)=>{
+    sz=sz||6; const tww=tw(str,sz,true), w=tww+5, h=sz*1.7, bw=rot?h:w, bh=rot?w:h, c=hex(hx);
+    ops.push("q /G9 gs 0.09 0.10 0.12 rg"); rrp(cx-bw/2,cy-bh/2,bw,bh,2.2,"f"); ops.push("Q");
+    ops.push(`${c} RG 0.5 w`); rrp(cx-bw/2,cy-bh/2,bw,bh,2.2,"S");
+    ops.push(`${c} rg BT /F2 ${sz} Tf `+(rot?`0 1 -1 0 ${f(cx+sz*0.35)} ${f(pH-cy-tww/2)} Tm`:`1 0 0 1 ${f(cx-tww/2)} ${f(pH-cy-sz*0.35)} Tm`)+` (${esc(str)}) Tj ET`);
+  };
+  const arr=(tx,ty,dx,dy,c,L,W)=>ops.push(`${c} rg 0.09 0.10 0.12 RG 0.4 w ${Pp(tx,ty)} m ${Pp(tx-dx*L-dy*W,ty-dy*L+dx*W)} l ${Pp(tx-dx*L+dy*W,ty-dy*L-dx*W)} l h B`);
+  const dimH=(x1,x2,y,str,hx,off,sz,lw)=>{ const len=Math.abs(x2-x1); if (len<0.8*m) return; const c=hex(hx), L=Math.min(2.2*m,len*.3), W=L*.36, d=x2>x1?1:-1;
+    ops.push(`0.09 0.10 0.12 RG ${(lw||0.6)+1.3} w ${Pp(x1,y)} m ${Pp(x2,y)} l S ${c} RG ${lw||0.6} w ${Pp(x1,y)} m ${Pp(x2,y)} l S`); arr(x1,y,d,0,c,L,W); arr(x2,y,-d,0,c,L,W); lbl(str,(x1+x2)/2+(off||0),y,hx,false,sz); };
+  const dimV=(y1,y2,x,str,hx,off,sz,lw)=>{ const len=Math.abs(y2-y1); if (len<0.8*m) return; const c=hex(hx), L=Math.min(2.2*m,len*.3), W=L*.36, d=y2>y1?1:-1;
+    ops.push(`0.09 0.10 0.12 RG ${(lw||0.6)+1.3} w ${Pp(x,y1)} m ${Pp(x,y2)} l S ${c} RG ${lw||0.6} w ${Pp(x,y1)} m ${Pp(x,y2)} l S`); arr(x,y1,0,d,c,L,W); arr(x,y2,0,-d,c,L,W); lbl(str,x,(y1+y2)/2+(off||0),hx,true,sz); };
+  const thin=(x1,y1,x2,y2,hx,w)=>ops.push(`${hex(hx)} RG ${w} w ${Pp(x1,y1)} m ${Pp(x2,y2)} l S`);
 
-  const ops = [];
-  ops.push('0 0 0 RG 0 0 0 rg');
+  /* 1 ▸ background, border, header */
+  ops.push(`0.43 0.44 0.46 rg 0 0 ${f(pageW*m)} ${f(pH)} re f`);
+  ops.push("1 1 1 RG 1.1 w"); rrp(bIn*m,bIn*m,(pageW-2*bIn)*m,(pageH-2*bIn)*m,3.5*m,"S");
+  txt("CUTTER PROFILE",(bIn+8)*m,13.5*m,15,"#ffffff",true);
+  txt(`${d2(S.mw)} x ${d2(S.mh)}mm   ·   ${n} cut${n===1?"":"s"}`,(bIn+8)*m,19*m,7.5,"#e6e8ee",false);
+  for (let i=0;i<8;i++) { ops.push(`${hex(DIMCOL[i])} rg`); ellp((pageW-bIn-9-i*4.6)*m,13*m,1.45*m,1.45*m,"f"); }
 
-  // Colour scheme (PDF RGB)
-  const COL_OUTER = '0.05 0.30 0.70';  // blue  – outer profile dims
-  const COL_INNER = '0.00 0.50 0.20';  // green – inner cut dims
-  const COL_GAP   = '0.80 0.35 0.00';  // orange – gap dims
-
-  function setCol(c) { ops.push(c+' RG '+c+' rg'); }
-
-  function drawLine(x1,y1,x2,y2,lw) {
-    if(lw) ops.push(lw+' w');
-    ops.push(p2(x1,y1)+' m '+p2(x2,y2)+' l S');
-  }
-
-  function arrowHead(tx,ty,dx,dy) {
-    const len=1.8*mm2pt, w=0.6*mm2pt;
-    const bx=tx-dx*len, by=ty-dy*len, px=-dy, py=dx;
-    ops.push(p2(tx,ty)+' m '+p2(bx+px*w,by+py*w)+' l '+p2(bx-px*w,by-py*w)+' l f');
-  }
-
-  function textAt(str, x, y, sz, align) {
-    const safe = str.replace(/\(/g,'\\(').replace(/\)/g,'\\)');
-    const aw = safe.length * sz * 0.52;
-    let tx = align==='c' ? x-aw/2 : align==='r' ? x-aw : x;
-    ops.push('BT /F1 '+sz+' Tf '+tx.toFixed(3)+' '+(pH-y-sz*0.35).toFixed(3)+' Td ('+safe+') Tj ET');
-  }
-
-  function textRot(str, x, y, sz) {
-    const safe = str.replace(/\(/g,'\\(').replace(/\)/g,'\\)');
-    const aw = safe.length * sz * 0.52;
-    ops.push('BT /F1 '+sz+' Tf 0 1 -1 0 '+x.toFixed(3)+' '+(pH-y+aw/2).toFixed(3)+' Tm ('+safe+') Tj ET');
-  }
-
-  function fmt(v) { return (v%1===0 ? v.toString() : v.toFixed(2))+'mm'; }
-
-  // ── Dimension line helpers ──
-  // Horizontal dim: spans x1→x2, dim line sits at y (going downward = lower y in our coords)
-  function hDim(x1, x2, y, label, sz) {
-    const s = sz||7;
-    const tick = 3*mm2pt;
-    const mid = (x1+x2)/2;
-    ops.push('0.25 w [1.5 1.5] 0 d');
-    drawLine(x1, y+tick*0.3, x1, y-tick);   // tick left
-    drawLine(x2, y+tick*0.3, x2, y-tick);   // tick right
-    ops.push('[] 0 d');
-    drawLine(x1, y-tick*0.5, x2, y-tick*0.5);  // dim line
-    arrowHead(x1, y-tick*0.5, 1, 0);
-    arrowHead(x2, y-tick*0.5, -1, 0);
-    textAt(label, mid, y-tick*0.5+1.8*mm2pt, s, 'c');
-  }
-
-  // Vertical dim: spans y1→y2, dim line sits at x (going left = lower x)
-  function vDim(y1, y2, x, label, sz) {
-    const s = sz||7;
-    const tick = 3*mm2pt;
-    const mid = (y1+y2)/2;
-    ops.push('0.25 w [1.5 1.5] 0 d');
-    drawLine(x+tick*0.3, y1, x-tick, y1);
-    drawLine(x+tick*0.3, y2, x-tick, y2);
-    ops.push('[] 0 d');
-    drawLine(x-tick*0.5, y1, x-tick*0.5, y2);
-    arrowHead(x-tick*0.5, y1, 0, 1);
-    arrowHead(x-tick*0.5, y2, 0, -1);
-    textRot(label, x-tick*0.5-2*mm2pt, mid, s);
-  }
-
-  // Small inline gap dim — drawn INSIDE the gap space between two edges
-  // Horizontal gap between right edge x1 and left edge x2, centred at midY
-  function hGap(x1, x2, midY, label) {
-    if (x2-x1 < 0.3*mm2pt) return;
-    const mid = (x1+x2)/2;
-    const tick = 1.8*mm2pt;
-    ops.push('0.2 w [] 0 d');
-    drawLine(x1, midY-tick/2, x1, midY+tick/2);  // left tick
-    drawLine(x2, midY-tick/2, x2, midY+tick/2);  // right tick
-    drawLine(x1, midY, x2, midY);                 // span line
-    arrowHead(x1, midY, 1, 0);
-    arrowHead(x2, midY, -1, 0);
-    textAt(label, mid, midY+1.5*mm2pt, 5.5, 'c');
-  }
-
-  // Vertical gap between bottom edge y1 and top edge y2, centred at midX
-  function vGap(y1, y2, midX, label) {
-    if (y2-y1 < 0.3*mm2pt) return;
-    const mid = (y1+y2)/2;
-    const tick = 1.8*mm2pt;
-    ops.push('0.2 w [] 0 d');
-    drawLine(midX-tick/2, y1, midX+tick/2, y1);
-    drawLine(midX-tick/2, y2, midX+tick/2, y2);
-    drawLine(midX, y1, midX, y2);
-    arrowHead(midX, y1, 0, 1);
-    arrowHead(midX, y2, 0, -1);
-    textRot(label, midX+1.5*mm2pt, mid, 5.5);
-  }
-
-  // ── Shape drawing ──
-  const roundRectPath=(...a)=>pdfRR(ops,p2,...a);
-
-  function ellipsePath(cx,cy,rx,ry) {
-    const kx=rx*K, ky=ry*K;
-    ops.push(p2(cx+rx,cy)+' m');
-    ops.push(p2(cx+rx,cy-ky)+' '+p2(cx+kx,cy-ry)+' '+p2(cx,cy-ry)+' c');
-    ops.push(p2(cx-kx,cy-ry)+' '+p2(cx-rx,cy-ky)+' '+p2(cx-rx,cy)+' c');
-    ops.push(p2(cx-rx,cy+ky)+' '+p2(cx-kx,cy+ry)+' '+p2(cx,cy+ry)+' c');
-    ops.push(p2(cx+kx,cy+ry)+' '+p2(cx+rx,cy+ky)+' '+p2(cx+rx,cy)+' c');
-    ops.push('h S');
-  }
-
-  // ── 1. Draw outer profile ── [BLACK]
-  ops.push('0 0 0 RG 0 0 0 rg');
-  ops.push('0.6 w');
-  if (S.profileType==="rect") {
-    const pr=S.profileR;
-    roundRectPath(ox,oy,S.mw*mm2pt,S.mh*mm2pt,pr.tl*mm2pt,pr.tr*mm2pt,pr.br*mm2pt,pr.bl*mm2pt);
-  } else if (S.profileType==="path") {
-    pdfPath(ops, p2, prof(), ox, oy, mm2pt);
-  } else {
-    ellipsePath(ox+S.mw/2*mm2pt, oy+S.mh/2*mm2pt, S.mw/2*mm2pt, S.mh/2*mm2pt);
-  }
-
-  // ── 2. Draw inner shapes ──
-  ops.push('0.4 w');
-  for (const r of S.placed) {
-    const rx=ox+r.x*mm2pt, ry=oy+r.y*mm2pt, rw=r.w*mm2pt, rh=r.h*mm2pt;
-    if (r.type==="dash") {
-      const fd=fitDash(r), cut=fd.cut*mm2pt, tie=fd.tie*mm2pt;
-      ops.push(`[${cut.toFixed(3)} ${tie.toFixed(3)}] 0 d`);
-      if (r.orient==="h") {
-        ops.push(p2(rx,ry)+' m');
-        ops.push(p2(rx+rw,ry)+' l S');
-      } else {
-        ops.push(p2(rx,ry)+' m');
-        ops.push(p2(rx,ry+rh)+' l S');
-      }
-      ops.push('[] 0 d');
-    } else if (r.type==="path") {
-      pdfPath(ops, p2, r, ox, oy, mm2pt);
-    } else if (r.type==="rect") {
-      roundRectPath(rx,ry,rw,rh,(r.r?.tl||0)*mm2pt,(r.r?.tr||0)*mm2pt,(r.r?.br||0)*mm2pt,(r.r?.bl||0)*mm2pt);
+  /* 2 ▸ profile panel + coloured sections */
+  ops.push("q 0.13 0.14 0.16 rg"); shapePath(P0,"f"); ops.push("Q");
+  sh.forEach((s,i)=>{
+    const c=hex(DIMCOL[i%DIMCOL.length]);
+    if (s.type==="dash") {
+      const q=fitDash(s), a=[gx(s.x),gy(s.y)], b=[gx(s.x+s.w),gy(s.y+s.h)];
+      ops.push(`${c} RG 1.8 w 0 J ${q.tie>0?`[${f(q.cut*m)} ${f(q.tie*m)}] 0 d `:""}${Pp(...a)} m ${Pp(...b)} l S [] 0 d`);
     } else {
-      ellipsePath(rx+rw/2, ry+rh/2, rw/2, rh/2);
+      if (!(s.type==="path"&&!s.closed)) { ops.push(`q /G5 gs ${c} rg`); shapePath(s,"f"); ops.push("Q"); }
+      ops.push(`${c} RG 1.1 w`); shapePath(s,"S");
     }
-  }
-
-  // ── 3. Outer profile dimension lines ── [BLUE]
-  setCol(COL_OUTER);
-  // Width: below profile
-  hDim(ox, pr, oy - 6*mm2pt, fmt(S.mw), 8);
-  // Height: left of profile
-  vDim(oy, pt_, ox - 6*mm2pt, fmt(S.mh), 8);
-  // Corner radius callout for rect
-  if (S.profileType==="rect") {
-    const pr=S.profileR;
-    const corners = [
-      { label:'TL', v:pr.tl, px:ox, py:oy },
-      { label:'TR', v:pr.tr, px:ox+S.mw*mm2pt, py:oy },
-      { label:'BR', v:pr.br, px:ox+S.mw*mm2pt, py:oy+S.mh*mm2pt },
-      { label:'BL', v:pr.bl, px:ox, py:oy+S.mh*mm2pt },
-    ];
-    const allSame = pr.tl===pr.tr && pr.tr===pr.br && pr.br===pr.bl;
-    if (allSame && pr.tl>0) {
-      const crPt=pr.tl*mm2pt;
-      ops.push('[] 0 d 0.2 w');
-      const lx=ox-4*mm2pt, ly=oy+crPt*1.5;
-      drawLine(ox+crPt*0.5, oy+crPt*0.5, lx, ly);
-      textAt('R'+pr.tl+'mm', lx-1*mm2pt, ly+1*mm2pt, 6, 'r');
-    } else {
-      corners.forEach(({label,v,px,py})=>{
-        if(v<=0) return;
-        const crPt=v*mm2pt;
-        ops.push('[] 0 d 0.2 w');
-        // leader line from corner inward
-        const dx = px===ox ? 1 : -1;
-        const dy = py===oy ? 1 : -1;
-        const lx=px+dx*5*mm2pt, ly=py+dy*5*mm2pt;
-        drawLine(px+dx*crPt*0.5, py+dy*crPt*0.5, lx, ly);
-        textAt(label+' R'+v+'mm', lx+dx*1*mm2pt, ly, 5, dx>0?'l':'r');
-      });
-    }
-  }
-
-  // ── 4. Inner shape size dims ── [GREEN]
-  setCol(COL_INNER);
-  for (const r of S.placed) {
-    const rx=ox+r.x*mm2pt, ry=oy+r.y*mm2pt, rw=r.w*mm2pt, rh=r.h*mm2pt;
-    const cx=rx+rw/2, cy=ry+rh/2;
-
-    if (r.type==="dash") {
-      // Label: length above/beside line, plus cut/tie callout
-      ops.push('0.2 w [] 0 d');
-      const len = r.orient==="h" ? r.w : r.h;
-      if (r.orient==="h") {
-        arrowHead(rx, ry, 1, 0); arrowHead(rx+rw, ry, -1, 0);
-        drawLine(rx, ry, rx+rw, ry);
-        textAt(fmt(len), cx, ry - 2*mm2pt, 6, 'c');
-        textAt(`cut ${fmt(r.cut)} / tie ${fmt(r.tie)}`, cx, ry - 4.5*mm2pt, 5, 'c');
-      } else {
-        arrowHead(rx, ry, 0, 1); arrowHead(rx, ry+rh, 0, -1);
-        drawLine(rx, ry, rx, ry+rh);
-        textAt(fmt(len), rx - 2*mm2pt, cy, 6, 'r');
-        textAt(`cut ${fmt(r.cut)} / tie ${fmt(r.tie)}`, rx - 2*mm2pt, cy + 3*mm2pt, 5, 'r');
-      }
-    } else if (r.type==="rect" || r.type==="path") {
-      // Width dim inside shape near bottom edge
-      hDim(rx, rx+rw, ry + 5*mm2pt, fmt(r.w), 6);
-      // Height dim inside shape near right edge
-      vDim(ry, ry+rh, rx+rw - 5*mm2pt, fmt(r.h), 6);
-    } else {
-      // Circle/oval: horizontal diameter
-      ops.push('0.2 w [] 0 d');
-      drawLine(rx, cy, rx+rw, cy);
-      arrowHead(rx, cy, 1, 0); arrowHead(rx+rw, cy, -1, 0);
-      textAt(fmt(r.w), cx, cy+1.8*mm2pt, 6.5, 'c');
-      if (r.h !== r.w) {
-        drawLine(cx, ry, cx, ry+rh);
-        arrowHead(cx, ry, 0, 1); arrowHead(cx, ry+rh, 0, -1);
-        textAt(fmt(r.h), cx+2*mm2pt, cy, 6.5, 'l');
-      }
-    }
-  }
-
-  // ── 5. Gap dims ── [ORANGE]
-  setCol(COL_GAP);
-  const placed = S.placed;
-  const boxes = placed.map(r => ({
-    x1:r.x, y1:r.y, x2:r.x+r.w, y2:r.y+r.h,
-    cx:r.x+r.w/2, cy:r.y+r.h/2
-  }));
-
-  const drawnH = new Set();
-  const drawnV = new Set();
-
-  // Between every pair of shapes
-  for (let i=0; i<boxes.length; i++) {
-    for (let j=i+1; j<boxes.length; j++) {
-      const a=boxes[i], b=boxes[j];
-
-      // Horizontal gap: a is left of b
-      const left  = a.x2 <= b.x1+0.01 ? a : (b.x2 <= a.x1+0.01 ? b : null);
-      const right = left===a ? b : left===b ? a : null;
-      if (left && right && right.x1 >= left.x2-0.01) {
-        const oy1=Math.max(left.y1,right.y1), oy2=Math.min(left.y2,right.y2);
-        if (oy2 > oy1+0.01) {
-          const gap=right.x1-left.x2;
-          const key=left.x2.toFixed(2)+'|'+right.x1.toFixed(2);
-          if (!drawnH.has(key) && gap>0.05) {
-            // Check nothing sits in between
-            const blocked=boxes.some((c,k)=>k!==i&&k!==j&&c.x1<right.x1-0.01&&c.x2>left.x2+0.01&&c.y1<oy2&&c.y2>oy1);
-            if (!blocked) {
-              drawnH.add(key);
-              const midY=oy+((oy1+oy2)/2)*mm2pt;
-              hGap(ox+left.x2*mm2pt, ox+right.x1*mm2pt, midY, fmt(gap));
-            }
-          }
-        }
-      }
-
-      // Vertical gap: a is above b (remember PDF: lower y1 = higher on page)
-      const top    = a.y2 <= b.y1+0.01 ? a : (b.y2 <= a.y1+0.01 ? b : null);
-      const bottom = top===a ? b : top===b ? a : null;
-      if (top && bottom && bottom.y1 >= top.y2-0.01) {
-        const ox1=Math.max(top.x1,bottom.x1), ox2=Math.min(top.x2,bottom.x2);
-        if (ox2 > ox1+0.01) {
-          const gap=bottom.y1-top.y2;
-          const key=top.y2.toFixed(2)+'|'+bottom.y1.toFixed(2);
-          if (!drawnV.has(key) && gap>0.05) {
-            const blocked=boxes.some((c,k)=>k!==i&&k!==j&&c.y1<bottom.y1-0.01&&c.y2>top.y2+0.01&&c.x1<ox2&&c.x2>ox1);
-            if (!blocked) {
-              drawnV.add(key);
-              const midX=ox+((ox1+ox2)/2)*mm2pt;
-              vGap(oy+top.y2*mm2pt, oy+bottom.y1*mm2pt, midX, fmt(gap));
-            }
-          }
-        }
-      }
-    }
-
-    // Gap from each shape to the outer profile edges
-    const a=boxes[i];
-    const aMidX=oy+(a.x1+a.x2)/2*mm2pt;
-    const aMidY=oy+(a.y1+a.y2)/2*mm2pt;
-
-    // Left edge gap
-    if (!boxes.some((b,j)=>j!==i&&b.x2<=a.x1+0.01&&b.y1<a.y2&&b.y2>a.y1) && a.x1>0.1) {
-      const key='L'+i;
-      if (!drawnH.has(key)) { drawnH.add(key);
-        hGap(ox, ox+a.x1*mm2pt, oy+(a.y1+a.y2)/2*mm2pt, fmt(a.x1)); }
-    }
-    // Right edge gap
-    if (!boxes.some((b,j)=>j!==i&&b.x1>=a.x2-0.01&&b.y1<a.y2&&b.y2>a.y1) && S.mw-a.x2>0.1) {
-      const key='R'+i;
-      if (!drawnH.has(key)) { drawnH.add(key);
-        hGap(ox+a.x2*mm2pt, pr, oy+(a.y1+a.y2)/2*mm2pt, fmt(S.mw-a.x2)); }
-    }
-    // Top edge gap
-    if (!boxes.some((b,j)=>j!==i&&b.y2<=a.y1+0.01&&b.x1<a.x2&&b.x2>a.x1) && a.y1>0.1) {
-      const key='T'+i;
-      if (!drawnV.has(key)) { drawnV.add(key);
-        vGap(oy, oy+a.y1*mm2pt, ox+(a.x1+a.x2)/2*mm2pt, fmt(a.y1)); }
-    }
-    // Bottom edge gap
-    if (!boxes.some((b,j)=>j!==i&&b.y1>=a.y2-0.01&&b.x1<a.x2&&b.x2>a.x1) && S.mh-a.y2>0.1) {
-      const key='B'+i;
-      if (!drawnV.has(key)) { drawnV.add(key);
-        vGap(oy+a.y2*mm2pt, pt_, ox+(a.x1+a.x2)/2*mm2pt, fmt(S.mh-a.y2)); }
-    }
-  }
-
-  // ── Build PDF ──
-  const stream = ops.join('\n');
-  const enc = new TextEncoder();
-  const streamLen = enc.encode(stream).length;
-
-  const header = '%PDF-1.4\n';
-  const s1 = '1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n';
-  const s2 = '2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n';
-  const s3 = '3 0 obj\n<< /Type /Page /Parent 2 0 R '
-    +'/MediaBox [0 0 '+pW.toFixed(3)+' '+pH.toFixed(3)+'] '
-    +'/Contents 4 0 R '
-    +'/Resources << /Font << /F1 5 0 R >> >> >>\nendobj\n';
-  const s4 = '4 0 obj\n<< /Length '+streamLen+' >>\nstream\n'+stream+'\nendstream\nendobj\n';
-  const s5 = '5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica '
-    +'/Encoding /WinAnsiEncoding >>\nendobj\n';
-
-  let pos = enc.encode(header).length;
-  const o1off = pos; pos += enc.encode(s1).length;
-  const o2off = pos; pos += enc.encode(s2).length;
-  const o3off = pos; pos += enc.encode(s3).length;
-  const o4off = pos; pos += enc.encode(s4).length;
-  const o5off = pos; pos += enc.encode(s5).length;
-  const xrefOff = pos;
-
-  let pdfStr = header + s1 + s2 + s3 + s4 + s5;
-  pdfStr += 'xref\n0 6\n0000000000 65535 f \n';
-  [o1off,o2off,o3off,o4off,o5off].forEach(off => {
-    pdfStr += off.toString().padStart(10,'0')+' 00000 n \n';
   });
-  pdfStr += 'trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n'+xrefOff+'\n%%EOF';
+  ops.push(`${hex(BC)} RG 1.6 w`); shapePath(P0,"S");
 
-  const blob = new Blob([pdfStr], {type:'application/pdf'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href=url; a.download='cutter-annotated.pdf';
-  document.body.appendChild(a); a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  /* 3 ▸ gap dimensions (white, light) */
+  for (const g of computeGaps()) {
+    if (g.ax===0) dimH(gx(g.from),gx(g.to),gy(g.mid),d2(g.g),GC,0,5,0.4); else dimV(gy(g.from),gy(g.to),gx(g.mid),d2(g.g),GC,0,5,0.4);
+  }
+
+  /* 4 ▸ shape dimensions in each shape's colour */
+  const corners=(s)=>[["tl",s.x,s.y,1,1],["tr",s.x+s.w,s.y,-1,1],["br",s.x+s.w,s.y+s.h,-1,-1],["bl",s.x,s.y+s.h,1,-1]];
+  sh.forEach((s,i)=>{
+    const hx=DIMCOL[i%DIMCOL.length], cxm=s.x+s.w/2, cym=s.y+s.h/2;
+    if (s.type==="dash") {
+      const q=fitDash(s), len=s.orient==="h"?s.w:s.h, str=`${d2(len)}mm   cut ${d2(q.cut)} / tie ${d2(q.tie)}`;
+      if (s.orient==="h") dimH(gx(s.x),gx(s.x+s.w),gy(s.y-3.2),str,hx,0,5.6); else dimV(gy(s.y),gy(s.y+s.h),gx(s.x-3.2),str,hx,0,5.6);
+      return;
+    }
+    const round=s.type==="circle"||s.type==="oval";
+    if (round) {
+      dimH(gx(s.x),gx(s.x+s.w),gy(cym),(s.type==="circle"?"Ø":"")+d2(s.w)+"mm",hx,s.type==="oval"?s.w*m*.2:0,5.6);
+      if (s.type==="oval") dimV(gy(s.y),gy(s.y+s.h),gx(cxm),d2(s.h)+"mm",hx,-s.h*m*.2,5.6);
+    } else {
+      dimH(gx(s.x),gx(s.x+s.w),gy(s.y+s.h*.74),d2(s.w)+"mm",hx,0,5.6);
+      dimV(gy(s.y),gy(s.y+s.h),gx(s.x+s.w*.26),d2(s.h)+"mm",hx,0,5.6);
+    }
+    if (Math.min(s.w,s.h)>=7) {                                   // numbered badge ties shape to the key
+      const bx=round?(s.type==="oval"?cxm-s.w*.2:cxm+s.w*.2):cxm, by=round?(s.type==="oval"?cym-s.h*.2:cym-s.h*.2):cym;
+      ops.push(`${hex(hx)} rg`); ellp(gx(bx),gy(by),2.1*m,2.1*m,"f");
+      const t=String(i+2); ops.push(`0.08 0.09 0.1 rg BT /F2 6 Tf 1 0 0 1 ${f(gx(bx)-tw(t,6,true)/2)} ${f(pH-gy(by)-2.1)} Tm (${t}) Tj ET`);
+    }
+    if (s.type==="rect" && Math.min(s.w,s.h)>=10) {
+      const fr=fitR(s.w,s.h,s.r||{});
+      for (const [k,cx,cy,sx,sy] of corners(s)) {
+        const r=fr[k]; if (r<0.005) continue;
+        const str="R"+d2(r), wm=(tw(str,5.2,true)+5)/m;
+        lbl(str,gx(cx+sx*(r*.29+1+wm/2)),gy(cy+sy*(r*.29+1+1.6)),hx,false,5.2);
+      }
+    }
+  });
+
+  /* 5 ▸ outer profile dimensions */
+  const circ=S.profileType==="circle";
+  const ext=(x1,y1,x2,y2)=>thin(x1,y1,x2,y2,BC,0.35);
+  ext(gx(0),gy(-1),gx(0),gy(-11.5)); ext(gx(S.mw),gy(-1),gx(S.mw),gy(-11.5));
+  dimH(gx(0),gx(S.mw),gy(-10),(circ?"Ø":"")+d2(S.mw)+"mm",BC,0,7.5,0.8);
+  if (!circ) { ext(gx(-1),gy(0),gx(-11.5),gy(0)); ext(gx(-1),gy(S.mh),gx(-11.5),gy(S.mh)); dimV(gy(0),gy(S.mh),gx(-10),d2(S.mh)+"mm",BC,0,7.5,0.8); }
+  if (S.profileType==="rect") {
+    const fr=fitR(S.mw,S.mh,S.profileR);
+    for (const [k,cx,cy,sx,sy] of corners({x:0,y:0,w:S.mw,h:S.mh})) {
+      const r=fr[k]; if (r<0.005) continue;
+      const lx=cx+sx*(r*.4+10), ly=cy-sy*4.6;
+      thin(gx(cx+sx*r*.2929),gy(cy+sy*r*.2929),gx(lx),gy(ly),BC,0.4);
+      lbl("R"+d2(r),gx(lx),gy(ly),BC,false,6);
+    }
+  }
+
+  /* 6 ▸ colour-coded key (bottom half) */
+  const kx0=kPad, ky0=drawH-3, kw=pageW-2*kPad, kh=pageH-bIn-6-ky0;
+  ops.push("q /G9 gs 0.10 0.11 0.13 rg"); rrp(kx0*m,ky0*m,kw*m,kh*m,3.5*m,"f"); ops.push("Q");
+  ops.push("0.26 0.28 0.32 RG 0.6 w"); rrp(kx0*m,ky0*m,kw*m,kh*m,3.5*m,"S");
+  txt("MEASUREMENTS KEY",(kx0+7)*m,(ky0+9)*m,11,"#ffffff",true);
+  DIMCOL.slice(0,6).forEach((c,i)=>{ ops.push(`${hex(c)} rg`); rrp((kx0+7+i*7.5)*m,(ky0+11.6)*m,6.2*m,1.1*m,0.5*m,"f"); });
+  colRows.forEach((rs,c)=>{
+    let y=ky0+keyHead; const x0=kx0+7+c*(colW+6);
+    rs.forEach((r,j)=>{
+      const idx=rows.indexOf(r), cy=y+3.4;
+      ops.push(`${hex(r.hex)} rg`); ellp((x0+2.5)*m,cy*m,2.5*m,2.5*m,"f");
+      const t=String(idx+1); ops.push(`0.08 0.09 0.1 rg BT /F2 6.4 Tf 1 0 0 1 ${f((x0+2.5)*m-tw(t,6.4,true)/2)} ${f(pH-cy*m-2.2)} Tm (${t}) Tj ET`);
+      txt(r.name,(x0+7)*m,(cy+1)*m,7.6,r.hex,true);
+      const sz=7*Math.min(1,((colW-33)*m)/tw(r.size,7,false));
+      txt(r.size,(x0+31)*m,(cy+1)*m,sz,r.hex,false);
+      if (r.rad) txt(r.rad,(x0+31)*m,(cy+4.6)*m,5.8,"#c9ccd6",false);
+      if (j<rs.length-1) thin((x0)*m,(y+r.h-0.4)*m,(x0+colW)*m,(y+r.h-0.4)*m,"#2a2d33",0.4);
+      y+=r.h;
+    });
+  });
+
+  /* PDF assembly */
+  const content=ops.join("\n"), pW=pageW*m;
+  const objs=["<< /Type /Catalog /Pages 2 0 R >>","<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${f(pW)} ${f(pH)}] /Contents 4 0 R /Resources << /Font << /F1 5 0 R /F2 6 0 R >> /ExtGState << /G5 << /ca 0.72 /CA 1 >> /G9 << /ca 0.88 /CA 1 >> >> >> >>`,
+    `<< /Length ${content.length} >>\nstream\n${content}\nendstream`,
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>"];
+  let pdf="%PDF-1.4\n"; const offs=[];
+  objs.forEach((o,i)=>{ offs.push(pdf.length); pdf+=`${i+1} 0 obj\n${o}\nendobj\n`; });
+  const xr=pdf.length;
+  pdf+=`xref\n0 ${objs.length+1}\n0000000000 65535 f \n`+offs.map(o=>String(o).padStart(10,"0")+" 00000 n \n").join("")+`trailer\n<< /Size ${objs.length+1} /Root 1 0 R >>\nstartxref\n${xr}\n%%EOF`;
+  const url=URL.createObjectURL(new Blob([pdf],{type:"application/pdf"}));
+  const a=document.createElement("a"); a.href=url; a.download="cutter-annotated.pdf";
+  document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
 };
 
 profUI(); addUI(); readProfile();
