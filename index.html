@@ -1099,36 +1099,36 @@ function computeGaps() {
 
 document.getElementById("downloadPdfAnnotated").onclick = () => {
   const m=72/25.4, f=v=>(+v).toFixed(3), d2=v=>(Math.round(v*100)/100).toFixed(2);
-  const sh=S.placed, n=sh.length, BC="#4da3ff", GC="#ffffff";
-  const hex=h=>[1,3,5].map(i=>(parseInt(h.substr(i,2),16)/255).toFixed(3)).join(" ");
+  const sh=S.placed, n=sh.length, BC="#0085ca", BL="#3db4ff";       // process blue / its light twin for dark pills
+  const hexs=(h,k)=>[1,3,5].map(i=>(Math.min(255,parseInt(h.substr(i,2),16)*(k||1))/255).toFixed(3)).join(" ");
+  const hex=h=>hexs(h,1), deep=h=>hexs(h,0.62);
   const WD={" ":278,".":278,":":278,",":278,"(":333,")":333,"-":333,"/":278,"x":500,"m":833,"R":722,"T":611,"L":556,"B":722,"O":778,"u":556,"t":278,"e":556,"r":333,"P":667,"o":556,"f":278,"i":222,"l":222,"S":667,"h":556,"a":556,"p":556,"M":833,"E":667,"A":667,"U":722,"K":667,"Y":667,"N":722,"C":722,"D":722,"G":778,"I":278,"W":944,"H":722,"n":556,"s":500,"c":500,"d":556,"g":556,"k":500,"b":556,"y":500,"w":722,"v":500,"z":500,"j":222,"q":556,"·":278,"Ø":778};
   const tw=(s,sz,b)=>{ let t=0; for (const c of s) t+=(WD[c]||556); return t*sz/1000*(b?1.06:1); };
   const esc=s=>s.replace(/[\\()]/g,"\\$&").replace(/Ø/g,"\\330").replace(/·/g,"\\267");
 
-  /* what each shape is called in the key */
   const rads=(r,all)=>{ const o=[["TL",r.tl],["TR",r.tr],["BR",r.br],["BL",r.bl]].filter(a=>all||a[1]>0.005); return o.length?o.map(a=>`${a[0]} ${d2(a[1]||0)}`).join("  ·  "):""; };
   const describe=(s,outer)=>{
-    if (s.type==="rect") { const fr=fitR(s.w,s.h,s.r||{}); return {size:`${d2(s.w)} x ${d2(s.h)}mm`, rad:rads(fr,outer&&fr&&(fr.tl+fr.tr+fr.br+fr.bl>0.005))}; }
+    if (s.type==="rect") { const fr=fitR(s.w,s.h,s.r||{}); return {size:`${d2(s.w)} x ${d2(s.h)}mm`, rad:rads(fr,outer&&(fr.tl+fr.tr+fr.br+fr.bl>0.005))}; }
     if (s.type==="circle") return {size:`Ø${d2(s.w)}mm`,rad:""};
     if (s.type==="oval") return {size:`${d2(s.w)} x ${d2(s.h)}mm  (oval)`,rad:""};
     if (s.type==="dash") { const q=fitDash(s); return {size:`Line ${d2(s.orient==="h"?s.w:s.h)}mm`,rad:`cut ${d2(q.cut)}  ·  tie ${d2(q.tie)}`}; }
     return {size:`${d2(s.w)} x ${d2(s.h)}mm  (custom outline)`,rad:""};
   };
   const P0=prof();
-  const info=[{name:"Outer Profile",hex:BC,...describe(P0,true)}].concat(sh.map((s,i)=>({name:"Shape "+(i+2),hex:DIMCOL[i%DIMCOL.length],...describe(s,false)})));
+  const info=[{name:"Outer Profile",hex:BL,...describe(P0,true)}].concat(sh.map((s,i)=>({name:"Shape "+(i+2),hex:DIMCOL[i%DIMCOL.length],...describe(s,false)})));
 
-  /* page layout (mm) */
+  /* layout (mm): top half white = drawing, bottom half black = key */
   const padL=24,padR=24,padT=34,padB=22,bIn=5;
   const drawH=S.mh+padT+padB, pageW=Math.max(S.mw+padL+padR,130);
-  const cols=pageW>=220?2:1, kPad=bIn+6, kInner=pageW-2*kPad-14, colW=(kInner-(cols-1)*6)/cols;
+  const cols=pageW>=220?2:1, kPad=bIn+8, kInner=pageW-2*kPad, colW=(kInner-(cols-1)*6)/cols;
   const rows=info.map(r=>({...r,h:6.8+(r.rad?3.4:0)})), per=Math.ceil(rows.length/cols);
   const colRows=[...Array(cols)].map((_,c)=>rows.slice(c*per,(c+1)*per));
-  const keyHead=18, keyNeed=keyHead+Math.max(...colRows.map(r=>r.reduce((a,b)=>a+b.h,0)))+8;
-  const keyH=Math.max(keyNeed,drawH*0.9), pageH=drawH+keyH, pH=pageH*m, ox=(pageW-S.mw)/2, oy=padT;
+  const keyHead=18, keyNeed=keyHead+Math.max(...colRows.map(r=>r.reduce((a,b)=>a+b.h,0)))+bIn+6;
+  const H2=Math.max(drawH,keyNeed), pageH=H2*2, pH=pageH*m, pW=pageW*m;
+  const ox=(pageW-S.mw)/2, oy=padT+(H2-drawH)/2;
   const gx=v=>(ox+v)*m, gy=v=>(oy+v)*m, Pp=(a,b)=>f(a)+" "+f(pH-b);
   const ops=[];
 
-  /* drawing primitives (pt, y measured down from the page top) */
   const rrp=(x,y,w,h,r,p)=>{ pdfRR(ops,Pp,x,y,w,h,r,r,r,r); ops[ops.length-1]="h "+p; };
   const ellp=(cx,cy,rx,ry,p)=>{ const k=0.5523,a=rx*k,b=ry*k;
     ops.push(`${Pp(cx+rx,cy)} m ${Pp(cx+rx,cy-b)} ${Pp(cx+a,cy-ry)} ${Pp(cx,cy-ry)} c ${Pp(cx-a,cy-ry)} ${Pp(cx-rx,cy-b)} ${Pp(cx-rx,cy)} c ${Pp(cx-rx,cy+b)} ${Pp(cx-a,cy+ry)} ${Pp(cx,cy+ry)} c ${Pp(cx+a,cy+ry)} ${Pp(cx+rx,cy+b)} ${Pp(cx+rx,cy)} c h ${p}`); };
@@ -1137,48 +1137,87 @@ document.getElementById("downloadPdfAnnotated").onclick = () => {
     else if (s.type==="path") { pdfPath(ops,Pp,s,ox*m,oy*m,m); if (s.closed) ops[ops.length-1]="h "+p; }
     else ellp(gx(s.x+s.w/2),gy(s.y+s.h/2),s.w/2*m,s.h/2*m,p);
   };
-  const txt=(str,x,y,sz,hx,bold)=>ops.push(`${hex(hx)} rg BT /${bold?"F2":"F1"} ${sz} Tf 1 0 0 1 ${f(x)} ${f(pH-y)} Tm (${esc(str)}) Tj ET`);
-  const lbl=(str,cx,cy,hx,rot,sz)=>{
-    sz=sz||6; const tww=tw(str,sz,true), w=tww+5, h=sz*1.7, bw=rot?h:w, bh=rot?w:h, c=hex(hx);
+  const txt=(str,x,y,sz,rgb,bold)=>ops.push(`${rgb} rg BT /${bold?"F2":"F1"} ${sz} Tf 1 0 0 1 ${f(x)} ${f(pH-y)} Tm (${esc(str)}) Tj ET`);
+  const pill=(str,cx,cy,hx,rot,sz)=>{
+    const tww=tw(str,sz,true), w=tww+5, h=sz*1.7, bw=rot?h:w, bh=rot?w:h, c=hex(hx);
     ops.push("q /G9 gs 0.09 0.10 0.12 rg"); rrp(cx-bw/2,cy-bh/2,bw,bh,2.2,"f"); ops.push("Q");
-    ops.push(`${c} RG 0.5 w`); rrp(cx-bw/2,cy-bh/2,bw,bh,2.2,"S");
+    ops.push(`${c} RG 0.6 w`); rrp(cx-bw/2,cy-bh/2,bw,bh,2.2,"S");
     ops.push(`${c} rg BT /F2 ${sz} Tf `+(rot?`0 1 -1 0 ${f(cx+sz*0.35)} ${f(pH-cy-tww/2)} Tm`:`1 0 0 1 ${f(cx-tww/2)} ${f(pH-cy-sz*0.35)} Tm`)+` (${esc(str)}) Tj ET`);
   };
-  const arr=(tx,ty,dx,dy,c,L,W)=>ops.push(`${c} rg 0.09 0.10 0.12 RG 0.4 w ${Pp(tx,ty)} m ${Pp(tx-dx*L-dy*W,ty-dy*L+dx*W)} l ${Pp(tx-dx*L+dy*W,ty-dy*L-dx*W)} l h B`);
-  const dimH=(x1,x2,y,str,hx,off,sz,lw)=>{ const len=Math.abs(x2-x1); if (len<0.8*m) return; const c=hex(hx), L=Math.min(2.2*m,len*.3), W=L*.36, d=x2>x1?1:-1;
-    ops.push(`0.09 0.10 0.12 RG ${(lw||0.6)+1.3} w ${Pp(x1,y)} m ${Pp(x2,y)} l S ${c} RG ${lw||0.6} w ${Pp(x1,y)} m ${Pp(x2,y)} l S`); arr(x1,y,d,0,c,L,W); arr(x2,y,-d,0,c,L,W); lbl(str,(x1+x2)/2+(off||0),y,hx,false,sz); };
-  const dimV=(y1,y2,x,str,hx,off,sz,lw)=>{ const len=Math.abs(y2-y1); if (len<0.8*m) return; const c=hex(hx), L=Math.min(2.2*m,len*.3), W=L*.36, d=y2>y1?1:-1;
-    ops.push(`0.09 0.10 0.12 RG ${(lw||0.6)+1.3} w ${Pp(x,y1)} m ${Pp(x,y2)} l S ${c} RG ${lw||0.6} w ${Pp(x,y1)} m ${Pp(x,y2)} l S`); arr(x,y1,0,d,c,L,W); arr(x,y2,0,-d,c,L,W); lbl(str,x,(y1+y2)/2+(off||0),hx,true,sz); };
-  const thin=(x1,y1,x2,y2,hx,w)=>ops.push(`${hex(hx)} RG ${w} w ${Pp(x1,y1)} m ${Pp(x2,y2)} l S`);
 
-  /* 1 ▸ background, border, header */
-  ops.push(`0.43 0.44 0.46 rg 0 0 ${f(pageW*m)} ${f(pH)} re f`);
-  ops.push("1 1 1 RG 1.1 w"); rrp(bIn*m,bIn*m,(pageW-2*bIn)*m,(pageH-2*bIn)*m,3.5*m,"S");
-  txt("CUTTER PROFILE",(bIn+8)*m,13.5*m,15,"#ffffff",true);
-  txt(`${d2(S.mw)} x ${d2(S.mh)}mm   ·   ${n} cut${n===1?"":"s"}`,(bIn+8)*m,19*m,7.5,"#e6e8ee",false);
+  /* labels are queued, then placed so that no two ever overlap */
+  const Q=[], obst=[], late=[];
+  const arr=(tx,ty,dx,dy,c,L,W)=>ops.push(`${c} rg 1 1 1 RG 0.4 w ${Pp(tx,ty)} m ${Pp(tx-dx*L-dy*W,ty-dy*L+dx*W)} l ${Pp(tx-dx*L+dy*W,ty-dy*L-dx*W)} l h B`);
+  const dimH=(x1,x2,y,str,hx,off,sz,lw,lineHex,prio)=>{ const len=Math.abs(x2-x1); if (len<0.8*m) return; sz=sz||6;
+    const c=lineHex?hex(lineHex):deep(hx), L=Math.min(2.2*m,len*.3), W=L*.36, d=x2>x1?1:-1;
+    ops.push(`1 1 1 RG ${(lw||0.6)+1.3} w ${Pp(x1,y)} m ${Pp(x2,y)} l S ${c} RG ${lw||0.6} w ${Pp(x1,y)} m ${Pp(x2,y)} l S`); arr(x1,y,d,0,c,L,W); arr(x2,y,-d,0,c,L,W);
+    Q.push({str,cx:(x1+x2)/2+(off||0),cy:y,hx,rot:false,sz,axis:"h",a0:Math.min(x1,x2),a1:Math.max(x1,x2),prio:prio||1}); };
+  const dimV=(y1,y2,x,str,hx,off,sz,lw,lineHex,prio)=>{ const len=Math.abs(y2-y1); if (len<0.8*m) return; sz=sz||6;
+    const c=lineHex?hex(lineHex):deep(hx), L=Math.min(2.2*m,len*.3), W=L*.36, d=y2>y1?1:-1;
+    ops.push(`1 1 1 RG ${(lw||0.6)+1.3} w ${Pp(x,y1)} m ${Pp(x,y2)} l S ${c} RG ${lw||0.6} w ${Pp(x,y1)} m ${Pp(x,y2)} l S`); arr(x,y1,0,d,c,L,W); arr(x,y2,0,-d,c,L,W);
+    Q.push({str,cx:x,cy:(y1+y2)/2+(off||0),hx,rot:true,sz,axis:"v",a0:Math.min(y1,y2),a1:Math.max(y1,y2),prio:prio||1}); };
+  const thin=(x1,y1,x2,y2,rgb,w)=>ops.push(`${rgb} RG ${w} w ${Pp(x1,y1)} m ${Pp(x2,y2)} l S`);
+  const ov=(a,b,p)=>a[0]<b[2]+p&&a[2]>b[0]-p&&a[1]<b[3]+p&&a[3]>b[1]-p;
+  function placeLabels() {
+    Q.sort((a,b)=>a.prio-b.prio);
+    const placed=[], lim=[(bIn+1.5)*m,(bIn+1.5)*m,(pageW-bIn-1.5)*m,(H2-2)*m];
+    const busy=r=>obst.some(o=>ov(o,r,1))||placed.some(o=>ov(o,r,1.2));
+    for (const L of Q) {
+      let pick=null, sz=L.sz;
+      for (let att=0; att<2 && !pick; att++) {
+        sz=L.sz*(att?0.82:1);
+        const w=tw(L.str,sz,true)+5, h=sz*1.7, bw=L.rot?h:w, bh=L.rot?w:h, cs=[[0,0]];
+        if (L.axis) {
+          const hz=L.axis==="h", own=hz?bw:bh, ext=hz?bh:bw, c0=hz?L.cx:L.cy;
+          let lo=L.a0+own/2+2.5-c0, hi=L.a1-own/2-2.5-c0; if (lo>hi) lo=hi=0;
+          const mv=(d,p)=>hz?[d,p]:[p,d];
+          for (let k=1;k<=80;k++) for (const s of [1,-1]) { const d=s*k*2.5; if (d>=lo-.01&&d<=hi+.01) cs.push(mv(d,0)); }
+          for (const ps of [1,-1,2,-2]) { const p=ps*(ext+1.5); cs.push(mv(0,p)); for (let k=1;k<=40;k++) for (const s of [1,-1]) { const d=s*k*2.5; if (d>=lo-.01&&d<=hi+.01) cs.push(mv(d,p)); } }
+        } else for (let r=1;r<=18;r++) for (let a=0;a<8;a++) { const an=a*Math.PI/4+0.4; cs.push([Math.cos(an)*r*3.5,Math.sin(an)*r*3.5]); }
+        cs.sort((p,q)=>(Math.abs(p[0])+Math.abs(p[1])*1.4)-(Math.abs(q[0])+Math.abs(q[1])*1.4));
+        for (const c of cs) {
+          const cx=L.cx+c[0], cy=L.cy+c[1], r=[cx-bw/2,cy-bh/2,cx+bw/2,cy+bh/2];
+          if (r[0]<lim[0]||r[2]>lim[2]||r[1]<lim[1]||r[3]>lim[3]) continue;
+          if (!busy(r)) { pick={cx,cy,r,sz}; break; }
+        }
+      }
+      if (!pick && L.prio>=3) continue;                       // lowest-priority gap label: omit rather than overlap
+      if (!pick) { const w=tw(L.str,L.sz,true)+5, h=L.sz*1.7, bw=L.rot?h:w, bh=L.rot?w:h; pick={cx:L.cx,cy:L.cy,r:[L.cx-bw/2,L.cy-bh/2,L.cx+bw/2,L.cy+bh/2],sz:L.sz}; }
+      placed.push(pick.r);
+      if (L.leader) thin(L.leader[0],L.leader[1],pick.cx,pick.cy,hex(BC),0.5);
+      pill(L.str,pick.cx,pick.cy,L.hx,L.rot,pick.sz);
+    }
+  }
+
+  /* 1 ▸ page: white top half, black bottom half, square process-blue border */
+  ops.push(`1 1 1 rg 0 ${f(pH/2)} ${f(pW)} ${f(pH/2)} re f`);
+  ops.push(`0 0 0 rg 0 0 ${f(pW)} ${f(pH/2)} re f`);
+  ops.push(`${hex(BC)} RG 1.5 w ${f(bIn*m)} ${f(bIn*m)} ${f((pageW-2*bIn)*m)} ${f((pageH-2*bIn)*m)} re S`);
+  txt("CUTTER PROFILE",(bIn+8)*m,13.5*m,15,"0.07 0.09 0.13",true);
+  txt(`${d2(S.mw)} x ${d2(S.mh)}mm   ·   ${n} cut${n===1?"":"s"}`,(bIn+8)*m,19*m,7.5,"0.36 0.40 0.46",false);
   for (let i=0;i<8;i++) { ops.push(`${hex(DIMCOL[i])} rg`); ellp((pageW-bIn-9-i*4.6)*m,13*m,1.45*m,1.45*m,"f"); }
 
-  /* 2 ▸ profile panel + coloured sections */
-  ops.push("q 0.13 0.14 0.16 rg"); shapePath(P0,"f"); ops.push("Q");
+  /* 2 ▸ profile board + pale coloured sections */
+  ops.push("0.965 0.97 0.98 rg"); shapePath(P0,"f");
   sh.forEach((s,i)=>{
-    const c=hex(DIMCOL[i%DIMCOL.length]);
+    const hx=DIMCOL[i%DIMCOL.length];
     if (s.type==="dash") {
-      const q=fitDash(s), a=[gx(s.x),gy(s.y)], b=[gx(s.x+s.w),gy(s.y+s.h)];
-      ops.push(`${c} RG 1.8 w 0 J ${q.tie>0?`[${f(q.cut*m)} ${f(q.tie*m)}] 0 d `:""}${Pp(...a)} m ${Pp(...b)} l S [] 0 d`);
+      const q=fitDash(s);
+      ops.push(`${deep(hx)} RG 1.8 w 0 J ${q.tie>0?`[${f(q.cut*m)} ${f(q.tie*m)}] 0 d `:""}${Pp(gx(s.x),gy(s.y))} m ${Pp(gx(s.x+s.w),gy(s.y+s.h))} l S [] 0 d`);
     } else {
-      if (!(s.type==="path"&&!s.closed)) { ops.push(`q /G5 gs ${c} rg`); shapePath(s,"f"); ops.push("Q"); }
-      ops.push(`${c} RG 1.1 w`); shapePath(s,"S");
+      if (!(s.type==="path"&&!s.closed)) { ops.push(`q /G5 gs ${hex(hx)} rg`); shapePath(s,"f"); ops.push("Q"); }
+      ops.push(`${deep(hx)} RG 0.9 w`); shapePath(s,"S");
     }
   });
   ops.push(`${hex(BC)} RG 1.6 w`); shapePath(P0,"S");
 
-  /* 3 ▸ gap dimensions (white, light) */
+  /* 3 ▸ gap dimensions (neutral) */
   for (const g of computeGaps()) {
-    if (g.ax===0) dimH(gx(g.from),gx(g.to),gy(g.mid),d2(g.g),GC,0,5,0.4); else dimV(gy(g.from),gy(g.to),gx(g.mid),d2(g.g),GC,0,5,0.4);
+    if (g.ax===0) dimH(gx(g.from),gx(g.to),gy(g.mid),d2(g.g),"#e5e7eb",0,5,0.4,"#3a3f47",3); else dimV(gy(g.from),gy(g.to),gx(g.mid),d2(g.g),"#e5e7eb",0,5,0.4,"#3a3f47",3);
   }
 
-  /* 4 ▸ shape dimensions in each shape's colour */
-  const corners=(s)=>[["tl",s.x,s.y,1,1],["tr",s.x+s.w,s.y,-1,1],["br",s.x+s.w,s.y+s.h,-1,-1],["bl",s.x,s.y+s.h,1,-1]];
+  /* 4 ▸ shape dimensions */
+  const corners=s=>[["tl",s.x,s.y,1,1],["tr",s.x+s.w,s.y,-1,1],["br",s.x+s.w,s.y+s.h,-1,-1],["bl",s.x,s.y+s.h,1,-1]];
   sh.forEach((s,i)=>{
     const hx=DIMCOL[i%DIMCOL.length], cxm=s.x+s.w/2, cym=s.y+s.h/2;
     if (s.type==="dash") {
@@ -1188,68 +1227,65 @@ document.getElementById("downloadPdfAnnotated").onclick = () => {
     }
     const round=s.type==="circle"||s.type==="oval";
     if (round) {
-      dimH(gx(s.x),gx(s.x+s.w),gy(cym),(s.type==="circle"?"Ø":"")+d2(s.w)+"mm",hx,s.type==="oval"?s.w*m*.2:0,5.6);
-      if (s.type==="oval") dimV(gy(s.y),gy(s.y+s.h),gx(cxm),d2(s.h)+"mm",hx,-s.h*m*.2,5.6);
+      dimH(gx(s.x),gx(s.x+s.w),gy(cym),(s.type==="circle"?"Ø":"")+d2(s.w)+"mm",hx,0,5.6);
+      if (s.type==="oval") dimV(gy(s.y),gy(s.y+s.h),gx(cxm),d2(s.h)+"mm",hx,0,5.6);
     } else {
       dimH(gx(s.x),gx(s.x+s.w),gy(s.y+s.h*.74),d2(s.w)+"mm",hx,0,5.6);
       dimV(gy(s.y),gy(s.y+s.h),gx(s.x+s.w*.26),d2(s.h)+"mm",hx,0,5.6);
     }
-    if (Math.min(s.w,s.h)>=7) {                                   // numbered badge ties shape to the key
-      const bx=round?(s.type==="oval"?cxm-s.w*.2:cxm+s.w*.2):cxm, by=round?(s.type==="oval"?cym-s.h*.2:cym-s.h*.2):cym;
-      ops.push(`${hex(hx)} rg`); ellp(gx(bx),gy(by),2.1*m,2.1*m,"f");
-      const t=String(i+2); ops.push(`0.08 0.09 0.1 rg BT /F2 6 Tf 1 0 0 1 ${f(gx(bx)-tw(t,6,true)/2)} ${f(pH-gy(by)-2.1)} Tm (${t}) Tj ET`);
+    if (Math.min(s.w,s.h)>=7) {
+      const bx=round?(s.type==="oval"?cxm-s.w*.2:cxm+s.w*.2):cxm, by=round?cym-s.h*.2:cym, X=gx(bx), Y=gy(by), t=String(i+2);
+      obst.push([X-2.1*m-1,Y-2.1*m-1,X+2.1*m+1,Y+2.1*m+1]);
+      late.push(()=>{ ops.push(`${hex(hx)} rg 0.09 0.10 0.12 RG 0.6 w`); ellp(X,Y,2.1*m,2.1*m,"B"); ops.push(`0.08 0.09 0.1 rg BT /F2 6 Tf 1 0 0 1 ${f(X-tw(t,6,true)/2)} ${f(pH-Y-2.1)} Tm (${t}) Tj ET`); });
     }
     if (s.type==="rect" && Math.min(s.w,s.h)>=10) {
       const fr=fitR(s.w,s.h,s.r||{});
       for (const [k,cx,cy,sx,sy] of corners(s)) {
         const r=fr[k]; if (r<0.005) continue;
         const str="R"+d2(r), wm=(tw(str,5.2,true)+5)/m;
-        lbl(str,gx(cx+sx*(r*.29+1+wm/2)),gy(cy+sy*(r*.29+1+1.6)),hx,false,5.2);
+        Q.push({str,cx:gx(cx+sx*(r*.29+1+wm/2)),cy:gy(cy+sy*(r*.29+1+1.6)),hx,rot:false,sz:5.2,axis:null,prio:2});
       }
     }
   });
 
-  /* 5 ▸ outer profile dimensions */
+  /* 5 ▸ outer profile dimensions (process blue) */
   const circ=S.profileType==="circle";
-  const ext=(x1,y1,x2,y2)=>thin(x1,y1,x2,y2,BC,0.35);
+  const ext=(x1,y1,x2,y2)=>thin(x1,y1,x2,y2,hex(BC),0.35);
   ext(gx(0),gy(-1),gx(0),gy(-11.5)); ext(gx(S.mw),gy(-1),gx(S.mw),gy(-11.5));
-  dimH(gx(0),gx(S.mw),gy(-10),(circ?"Ø":"")+d2(S.mw)+"mm",BC,0,7.5,0.8);
-  if (!circ) { ext(gx(-1),gy(0),gx(-11.5),gy(0)); ext(gx(-1),gy(S.mh),gx(-11.5),gy(S.mh)); dimV(gy(0),gy(S.mh),gx(-10),d2(S.mh)+"mm",BC,0,7.5,0.8); }
+  dimH(gx(0),gx(S.mw),gy(-10),(circ?"Ø":"")+d2(S.mw)+"mm",BL,0,7.5,0.8,BC,0);
+  if (!circ) { ext(gx(-1),gy(0),gx(-11.5),gy(0)); ext(gx(-1),gy(S.mh),gx(-11.5),gy(S.mh)); dimV(gy(0),gy(S.mh),gx(-10),d2(S.mh)+"mm",BL,0,7.5,0.8,BC,0); }
   if (S.profileType==="rect") {
     const fr=fitR(S.mw,S.mh,S.profileR);
     for (const [k,cx,cy,sx,sy] of corners({x:0,y:0,w:S.mw,h:S.mh})) {
       const r=fr[k]; if (r<0.005) continue;
-      const lx=cx+sx*(r*.4+10), ly=cy-sy*4.6;
-      thin(gx(cx+sx*r*.2929),gy(cy+sy*r*.2929),gx(lx),gy(ly),BC,0.4);
-      lbl("R"+d2(r),gx(lx),gy(ly),BC,false,6);
+      Q.push({str:"R"+d2(r),cx:gx(cx+sx*(r*.4+10)),cy:gy(cy-sy*4.6),hx:BL,rot:false,sz:6,axis:null,prio:0,leader:[gx(cx+sx*r*.2929),gy(cy+sy*r*.2929)]});
     }
   }
+  late.forEach(fn=>fn()); placeLabels();
 
-  /* 6 ▸ colour-coded key (bottom half) */
-  const kx0=kPad, ky0=drawH-3, kw=pageW-2*kPad, kh=pageH-bIn-6-ky0;
-  ops.push("q /G9 gs 0.10 0.11 0.13 rg"); rrp(kx0*m,ky0*m,kw*m,kh*m,3.5*m,"f"); ops.push("Q");
-  ops.push("0.26 0.28 0.32 RG 0.6 w"); rrp(kx0*m,ky0*m,kw*m,kh*m,3.5*m,"S");
-  txt("MEASUREMENTS KEY",(kx0+7)*m,(ky0+9)*m,11,"#ffffff",true);
-  DIMCOL.slice(0,6).forEach((c,i)=>{ ops.push(`${hex(c)} rg`); rrp((kx0+7+i*7.5)*m,(ky0+11.6)*m,6.2*m,1.1*m,0.5*m,"f"); });
+  /* 6 ▸ colour-coded key on the black bottom half */
+  const ky0=H2+6;
+  txt("MEASUREMENTS KEY",kPad*m,(ky0+6)*m,11,"1 1 1",true);
+  DIMCOL.slice(0,6).forEach((c,i)=>{ ops.push(`${hex(c)} rg`); rrp((kPad+i*7.5)*m,(ky0+8.6)*m,6.2*m,1.1*m,0.5*m,"f"); });
   colRows.forEach((rs,c)=>{
-    let y=ky0+keyHead; const x0=kx0+7+c*(colW+6);
+    let y=ky0+keyHead-3; const x0=kPad+c*(colW+6);
     rs.forEach((r,j)=>{
       const idx=rows.indexOf(r), cy=y+3.4;
       ops.push(`${hex(r.hex)} rg`); ellp((x0+2.5)*m,cy*m,2.5*m,2.5*m,"f");
       const t=String(idx+1); ops.push(`0.08 0.09 0.1 rg BT /F2 6.4 Tf 1 0 0 1 ${f((x0+2.5)*m-tw(t,6.4,true)/2)} ${f(pH-cy*m-2.2)} Tm (${t}) Tj ET`);
-      txt(r.name,(x0+7)*m,(cy+1)*m,7.6,r.hex,true);
+      txt(r.name,(x0+7)*m,(cy+1)*m,7.6,hex(r.hex),true);
       const sz=7*Math.min(1,((colW-33)*m)/tw(r.size,7,false));
-      txt(r.size,(x0+31)*m,(cy+1)*m,sz,r.hex,false);
-      if (r.rad) txt(r.rad,(x0+31)*m,(cy+4.6)*m,5.8,"#c9ccd6",false);
-      if (j<rs.length-1) thin((x0)*m,(y+r.h-0.4)*m,(x0+colW)*m,(y+r.h-0.4)*m,"#2a2d33",0.4);
+      txt(r.size,(x0+31)*m,(cy+1)*m,sz,hex(r.hex),false);
+      if (r.rad) txt(r.rad,(x0+31)*m,(cy+4.6)*m,5.8,"0.78 0.80 0.84",false);
+      if (j<rs.length-1) thin(x0*m,(y+r.h-0.4)*m,(x0+colW)*m,(y+r.h-0.4)*m,"0.17 0.18 0.20",0.4);
       y+=r.h;
     });
   });
 
   /* PDF assembly */
-  const content=ops.join("\n"), pW=pageW*m;
+  const content=ops.join("\n");
   const objs=["<< /Type /Catalog /Pages 2 0 R >>","<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-    `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${f(pW)} ${f(pH)}] /Contents 4 0 R /Resources << /Font << /F1 5 0 R /F2 6 0 R >> /ExtGState << /G5 << /ca 0.72 /CA 1 >> /G9 << /ca 0.88 /CA 1 >> >> >> >>`,
+    `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${f(pW)} ${f(pH)}] /Contents 4 0 R /Resources << /Font << /F1 5 0 R /F2 6 0 R >> /ExtGState << /G5 << /ca 0.3 /CA 1 >> /G9 << /ca 0.92 /CA 1 >> >> >> >>`,
     `<< /Length ${content.length} >>\nstream\n${content}\nendstream`,
     "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
     "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>"];
