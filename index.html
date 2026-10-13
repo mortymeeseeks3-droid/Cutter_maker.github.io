@@ -169,9 +169,9 @@ label.fbtn:hover{background:#d6d600;color:#111}
     </div>
     <div class="logoRow">
       <label class="fbtn" for="jLogo">&#128193; Choose logo file…</label>
-      <input id="jLogo" type="file" accept="image/*,.png,.jpg,.jpeg,.svg,.webp,.gif" hidden>
+      <input id="jLogo" type="file" accept="image/*,application/pdf,.pdf,.png,.jpg,.jpeg,.svg,.webp,.gif" hidden>
       <img id="jLogoPrev" hidden alt="logo">
-      <span id="jLogoName">No logo selected (drop an image here too)</span>
+      <span id="jLogoName">No logo selected (PNG, JPG, SVG or PDF · drop a file here too)</span>
       <button id="jLogoX" hidden>Remove</button>
     </div>
     <div id="jLogoMsg"></div>
@@ -1353,33 +1353,48 @@ document.getElementById("downloadPdfAnnotated").onclick = () => {
 /* ───────── Formal A4 sheet: job details, logo, schedule, title block ───────── */
 const JOB_KEY = "cuttermaker.job", job = {client:"",job:"",cutter:"",notes:"",date:"",logo:null,lw:0,lh:0};
 try { Object.assign(job, JSON.parse(localStorage.getItem(JOB_KEY)||"{}")); } catch(e) {}
-const jobSave = () => { try { localStorage.setItem(JOB_KEY, JSON.stringify(job)); } catch(e) {} };
+const jobSave = () => { try { localStorage.setItem(JOB_KEY, JSON.stringify(job)); return true; } catch(e) { return false; } };
 [["jClient","client"],["jJob","job"],["jCutter","cutter"],["jNotes","notes"],["jDate","date"]].forEach(([id,k]) => { $(id).value=job[k]||""; $(id).oninput=()=>{ job[k]=$(id).value; jobSave(); }; });
 function logoUI() {
   const im=$("jLogoPrev"); im.hidden=!job.logo; if (job.logo) im.src=job.logo; $("jLogoX").hidden=!job.logo;
-  $("jLogoName").textContent = job.logo ? (job.logoName||"Logo loaded") : "No logo selected (drop an image here too)";
+  $("jLogoName").textContent = job.logo ? (job.logoName||"Logo loaded") : "No logo selected (PNG, JPG, SVG or PDF · drop a file here too)";
 }
 logoUI();
-function loadLogoFile(f) {
-  if (!f) return; const msg=$("jLogoMsg"); msg.textContent="";
-  if (f.type && !/^image\//.test(f.type)) { msg.textContent="That isn't an image file — choose a PNG, JPG or SVG."; return; }
-  const fr=new FileReader();
-  fr.onerror=()=>{ msg.textContent="Couldn't read that file."; };
-  fr.onload=()=>{
-    const im=new Image();
-    im.onerror=()=>{ msg.textContent="Couldn't open that image — try a PNG or JPG."; };
-    im.onload=()=>{
-      try {
-        let iw=im.naturalWidth||im.width, ih=im.naturalHeight||im.height; if (!iw||!ih) { iw=400; ih=200; }
-        const k=iw>900?900/iw:(/svg/.test(f.type)?Math.min(8,900/iw):1), cv=document.createElement("canvas");
-        cv.width=Math.max(1,Math.round(iw*k)); cv.height=Math.max(1,Math.round(ih*k));
-        const cx=cv.getContext("2d"); cx.fillStyle="#fff"; cx.fillRect(0,0,cv.width,cv.height); cx.drawImage(im,0,0,cv.width,cv.height);
-        job.logo=cv.toDataURL("image/jpeg",0.92); job.lw=cv.width; job.lh=cv.height; job.logoName=f.name; jobSave(); logoUI();
-      } catch (err) { msg.textContent="That image couldn't be used ("+(err&&err.message||err)+"). Try a PNG or JPG."; }
-    };
-    im.src=fr.result;
-  };
-  fr.readAsDataURL(f);
+function trimCanvas(cv) {
+  const w=cv.width, h=cv.height, d=cv.getContext("2d").getImageData(0,0,w,h).data; let hasT=false;
+  for (let i=3;i<d.length;i+=4) if (d[i]<250) { hasT=true; break; }
+  let x0=w,y0=h,x1=-1,y1=-1;
+  for (let y=0;y<h;y++) for (let x=0;x<w;x++) { const i=(y*w+x)*4;
+    if (d[i+3]>8 && (hasT || d[i]<245||d[i+1]<245||d[i+2]<245)) { if(x<x0)x0=x; if(x>x1)x1=x; if(y<y0)y0=y; if(y>y1)y1=y; } }
+  if (x1<0) return cv;
+  const pad=Math.round(Math.max(w,h)*0.01); x0=Math.max(0,x0-pad); y0=Math.max(0,y0-pad); x1=Math.min(w-1,x1+pad); y1=Math.min(h-1,y1+pad);
+  const out=document.createElement("canvas"); out.width=x1-x0+1; out.height=y1-y0+1;
+  out.getContext("2d").drawImage(cv,x0,y0,out.width,out.height,0,0,out.width,out.height); return out;
+}
+async function loadLogoFile(f) {
+  if (!f) return; const msg=$("jLogoMsg");
+  const isPdf=f.type==="application/pdf"||/\.pdf$/i.test(f.name), isSvg=/svg/.test(f.type)||/\.svg$/i.test(f.name);
+  if (!isPdf && f.type && !/^image\//.test(f.type)) { msg.textContent="Choose an image (PNG, JPG, SVG…) or a PDF."; return; }
+  msg.style.color="#aaa"; msg.textContent="Loading logo…";
+  try {
+    let url, w, h;
+    const canvasOf=(iw,ih)=>{ const cv=document.createElement("canvas"); cv.width=Math.max(1,Math.round(iw)); cv.height=Math.max(1,Math.round(ih)); return cv; };
+    if (isPdf) {                                           // first page rendered at very high resolution, transparent, trimmed to the artwork
+      pdfInit();
+      const pdf=await pdfjsLib.getDocument({data:new Uint8Array(await f.arrayBuffer())}).promise, page=await pdf.getPage(1);
+      const v1=page.getViewport({scale:1}), vp=page.getViewport({scale:3200/Math.max(v1.width,v1.height)}), cv=canvasOf(vp.width,vp.height);
+      await page.render({canvasContext:cv.getContext("2d"),viewport:vp,background:"rgba(0,0,0,0)"}).promise;
+      const tc=trimCanvas(cv); url=tc.toDataURL("image/png"); w=tc.width; h=tc.height;
+    } else {
+      const raw=await new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=()=>res(fr.result); fr.onerror=()=>rej(new Error("couldn't read the file")); fr.readAsDataURL(f); });
+      const im=await new Promise((res,rej)=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=()=>rej(new Error("couldn't open that image")); i.src=raw; });
+      let iw=im.naturalWidth||im.width, ih=im.naturalHeight||im.height;
+      if (isSvg) { if (!iw||!ih) { iw=800; ih=400; } const k=3200/Math.max(iw,ih), cv=canvasOf(iw*k,ih*k); cv.getContext("2d").drawImage(im,0,0,cv.width,cv.height); url=cv.toDataURL("image/png"); w=cv.width; h=cv.height; }
+      else { url=raw; w=iw; h=ih; }                        // raster logos are kept exactly as supplied (no resampling, no recompression)
+    }
+    job.logo=url; job.lw=w; job.lh=h; job.logoName=`${f.name}  (${w} × ${h} px)`; const saved=jobSave(); logoUI();
+    msg.style.color=""; msg.textContent=saved?"":"Logo loaded, but it's too large to remember between sessions.";
+  } catch (err) { msg.style.color=""; msg.textContent="That file couldn't be used as a logo ("+(err&&err.message||err)+")."; }
 }
 $("jLogo").onchange = e => { loadLogoFile(e.target.files[0]); e.target.value=""; };
 $("a4Modal").addEventListener("dragover", e => e.preventDefault());
@@ -1389,7 +1404,46 @@ $("expBtn").onclick = e => { e.stopPropagation(); $("expMenu").hidden=!$("expMen
 $("expMenu").onclick = () => { $("expMenu").hidden=true; };
 document.addEventListener("click", () => { $("expMenu").hidden=true; });
 
-const exportA4 = () => {
+
+async function deflateBytes(u8) {
+  if (typeof CompressionStream==="undefined") return {data:u8,filter:null};
+  try { const st=new Blob([u8]).stream().pipeThrough(new CompressionStream("deflate")); return {data:new Uint8Array(await new Response(st).arrayBuffer()),filter:"FlateDecode"}; }
+  catch (e) { return {data:u8,filter:null}; }
+}
+function jpegInfo(b) {                       // size, components and EXIF orientation of a JPEG
+  if (b[0]!==0xFF||b[1]!==0xD8) return null; let i=2; const o={orient:1};
+  while (i+4<b.length) {
+    if (b[i]!==0xFF) { i++; continue; } const mk=b[i+1];
+    if (mk===0xD8||mk===0x01||(mk>=0xD0&&mk<=0xD7)) { i+=2; continue; } if (mk===0xFF) { i++; continue; }
+    const len=(b[i+2]<<8)|b[i+3];
+    if (mk===0xE1 && b[i+4]===0x45 && b[i+5]===0x78) {
+      const t=i+10, le=b[t]===0x49, r16=p=>le?(b[p]|(b[p+1]<<8)):((b[p]<<8)|b[p+1]), r32=p=>le?(b[p]|(b[p+1]<<8)|(b[p+2]<<16)|(b[p+3]<<24)):((b[p]<<24)|(b[p+1]<<16)|(b[p+2]<<8)|b[p+3]);
+      const ifd=t+r32(t+4), n=r16(ifd); for (let k=0;k<n;k++) { const e=ifd+2+k*12; if (r16(e)===0x0112) o.orient=r16(e+8); }
+    }
+    if (mk>=0xC0&&mk<=0xCF&&mk!==0xC4&&mk!==0xC8&&mk!==0xCC) { o.h=(b[i+5]<<8)|b[i+6]; o.w=(b[i+7]<<8)|b[i+8]; o.comps=b[i+9]; return o; }
+    i+=2+len;
+  }
+  return null;
+}
+async function prepareLogo() {
+  const src=job.logo; if (!src) return null;
+  if (/^data:image\/jpe?g/.test(src)) {       // JPEG: embed the original file bytes untouched
+    const s=atob(src.split(",")[1]), u=new Uint8Array(s.length); for (let i=0;i<s.length;i++) u[i]=s.charCodeAt(i);
+    let inf=null; try { inf=jpegInfo(u); } catch(e) {}
+    if (inf && inf.orient===1 && (inf.comps===3||inf.comps===1) && inf.w && inf.h) return {w:inf.w,h:inf.h,cs:inf.comps===3?"DeviceRGB":"DeviceGray",filter:"DCTDecode",data:u,alpha:null};
+  }
+  const im=await new Promise((res,rej)=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=()=>rej(new Error("logo decode")); i.src=src; });
+  let w=im.naturalWidth||im.width, h=im.naturalHeight||im.height; const k=Math.min(1,6000/Math.max(w,h)); w=Math.max(1,Math.round(w*k)); h=Math.max(1,Math.round(h*k));
+  const cv=document.createElement("canvas"); cv.width=w; cv.height=h; const cx=cv.getContext("2d"); cx.drawImage(im,0,0,w,h);
+  const d=cx.getImageData(0,0,w,h).data, rgb=new Uint8Array(w*h*3), al=new Uint8Array(w*h); let hasA=false;
+  for (let p=0,q=0,r=0;p<d.length;p+=4) { rgb[q++]=d[p]; rgb[q++]=d[p+1]; rgb[q++]=d[p+2]; const a=d[p+3]; al[r++]=a; if (a<255) hasA=true; }
+  const c=await deflateBytes(rgb), out={w,h,cs:"DeviceRGB",filter:c.filter,data:c.data,alpha:null};
+  if (hasA) { const a=await deflateBytes(al); out.alpha={data:a.data,filter:a.filter}; }   // keeps transparent backgrounds
+  return out;
+}
+
+const exportA4 = async () => {
+  const LG = job.logo ? await prepareLogo().catch(()=>null) : null;
   const m=72/25.4, f=v=>(+v).toFixed(3), d2=v=>(Math.round(v*100)/100).toFixed(2);
   const PW=297, PH=210, M=8, pW=PW*m, pH=PH*m, sh=S.placed, BC="#0085ca";
   const NAVY="0.07 0.12 0.22", GREY="0.42 0.46 0.52", RULE="0.80 0.82 0.86";
@@ -1485,8 +1539,8 @@ const exportA4 = () => {
   line((M)*m,HY*m,(PW-M)*m,HY*m,NAVY,0.9);
   ops.push(`${hex(BC)} rg`); rect(M*m,HY*m,(PW-2*M)*m,1.1*m,"f");
   let tx=M+5;
-  if (job.logo) {
-    const bw=48, bh=14, ar=(job.lw||1)/(job.lh||1); let lw=bw, lh=bw/ar; if (lh>bh) { lh=bh; lw=bh*ar; }
+  if (LG) {
+    const bw=48, bh=14, ar=LG.w/LG.h; let lw=bw, lh=bw/ar; if (lh>bh) { lh=bh; lw=bh*ar; }
     ops.push(`q ${f(lw*m)} 0 0 ${f(lh*m)} ${f((M+5)*m)} ${f(pH-(M+3+(bh-lh)/2+lh)*m)} cm /Im1 Do Q`); tx=M+5+lw+6;
   }
   txt("CUTTER PROFILE",tx*m,(M+10.2)*m,17,NAVY,true);
@@ -1582,14 +1636,14 @@ const exportA4 = () => {
   const content=ops.join("\n"), enc=new TextEncoder(), chunks=[]; let pos=0;
   const put=b=>{ const u=typeof b==="string"?enc.encode(b):b; chunks.push(u); pos+=u.length; }, offs=[];
   const obj=(n,body,bytes)=>{ offs[n]=pos; put(`${n} 0 obj\n${body}`); if (bytes) { put("\nstream\n"); put(bytes); put("\nendstream"); } put("\nendobj\n"); };
-  let imgBytes=null; if (job.logo) { const b=atob(job.logo.split(",")[1]); imgBytes=new Uint8Array(b.length); for (let i=0;i<b.length;i++) imgBytes[i]=b.charCodeAt(i); }
-  const nObj=imgBytes?7:6;
+  const nObj=6+(LG?1:0)+(LG&&LG.alpha?1:0);
   put("%PDF-1.4\n%\xE2\xE3\xCF\xD3\n");
   obj(1,"<< /Type /Catalog /Pages 2 0 R >>"); obj(2,"<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
-  obj(3,`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${f(pW)} ${f(pH)}] /Contents 4 0 R /Resources << /Font << /F1 5 0 R /F2 6 0 R >> ${imgBytes?"/XObject << /Im1 7 0 R >> ":""}/ExtGState << /G5 << /ca 0.28 /CA 1 >> /G9 << /ca 0.95 /CA 1 >> >> >> >>`);
+  obj(3,`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${f(pW)} ${f(pH)}] /Contents 4 0 R /Resources << /Font << /F1 5 0 R /F2 6 0 R >> ${LG?"/XObject << /Im1 7 0 R >> ":""}/ExtGState << /G5 << /ca 0.28 /CA 1 >> /G9 << /ca 0.95 /CA 1 >> >> >> >>`);
   obj(4,`<< /Length ${enc.encode(content).length} >>`,enc.encode(content));
   obj(5,"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>"); obj(6,"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>");
-  if (imgBytes) obj(7,`<< /Type /XObject /Subtype /Image /Width ${job.lw} /Height ${job.lh} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${imgBytes.length} >>`,imgBytes);
+  if (LG) obj(7,`<< /Type /XObject /Subtype /Image /Width ${LG.w} /Height ${LG.h} /ColorSpace /${LG.cs} /BitsPerComponent 8 ${LG.filter?"/Filter /"+LG.filter+" ":""}${LG.alpha?"/SMask 8 0 R ":""}/Length ${LG.data.length} >>`,LG.data);
+  if (LG&&LG.alpha) obj(8,`<< /Type /XObject /Subtype /Image /Width ${LG.w} /Height ${LG.h} /ColorSpace /DeviceGray /BitsPerComponent 8 ${LG.alpha.filter?"/Filter /"+LG.alpha.filter+" ":""}/Length ${LG.alpha.data.length} >>`,LG.alpha.data);
   const xr=pos; put(`xref\n0 ${nObj+1}\n0000000000 65535 f \n`); for (let i=1;i<=nObj;i++) put(String(offs[i]).padStart(10,"0")+" 00000 n \n");
   put(`trailer\n<< /Size ${nObj+1} /Root 1 0 R >>\nstartxref\n${xr}\n%%EOF`);
   const url=URL.createObjectURL(new Blob(chunks,{type:"application/pdf"})), a=document.createElement("a");
@@ -1598,7 +1652,7 @@ const exportA4 = () => {
 
 $("downloadA4").onclick = () => { $("jLogoMsg").textContent=""; $("a4Modal").hidden=false; $("jClient").focus(); };
 $("a4Cancel").onclick = () => { $("a4Modal").hidden=true; };
-$("a4Go").onclick = () => { $("a4Modal").hidden=true; exportA4(); };
+$("a4Go").onclick = () => { $("a4Modal").hidden=true; exportA4().catch(err=>alert("Export failed: "+(err&&err.message||err))); };
 $("a4Modal").addEventListener("keydown", e => { if (e.key==="Escape") $("a4Modal").hidden=true; });
 $("a4Modal").addEventListener("mousedown", e => { if (e.target===$("a4Modal")) $("a4Modal").hidden=true; });
 profUI(); addUI(); readProfile();
