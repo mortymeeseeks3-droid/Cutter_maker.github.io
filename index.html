@@ -34,6 +34,20 @@ summary{cursor:pointer;color:#aaa;font-size:12px;margin:4px 0}
 #bar button.on{background:#d6d600;color:#111}
 #report.c{max-height:22px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;padding-top:4px!important;padding-bottom:4px!important}
 #report .rx{position:absolute;right:8px;top:3px;color:#d6d600;font-size:13px}
+#exp{position:relative}
+#expMenu{position:absolute;right:0;top:100%;margin-top:4px;background:#161616;border:1px solid #d6d600;border-radius:6px;padding:5px;display:flex;flex-direction:column;gap:4px;min-width:280px;z-index:20}
+#expMenu button{text-align:left;font-size:13px;font-weight:normal;background:#242424;color:#eee;border:1px solid #444;padding:8px 10px}
+#expMenu button:hover{background:#d6d600;color:#111}
+#status{right:340px!important}
+#a4Modal{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:50;padding:12px;overflow:auto}
+#a4Modal .card{background:#1a1a1a;border:1px solid #d6d600;border-radius:8px;padding:16px;width:100%;max-width:440px}
+#a4Modal .card h3{color:#d6d600}
+.logoRow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px;padding:10px;border:1px dashed #555;border-radius:6px}
+label.fbtn{display:inline-block;flex-direction:row;padding:9px 12px;background:#2a2a1a;border:1px solid #d6d600;color:#d6d600;border-radius:4px;cursor:pointer;font-size:14px;font-weight:bold}
+label.fbtn:hover{background:#d6d600;color:#111}
+#jLogoPrev{max-height:42px;max-width:140px;background:#fff;border-radius:3px;padding:2px}
+#jLogoName{font-size:12px;color:#aaa;flex:1;min-width:120px;word-break:break-all}
+#jLogoMsg{color:#ff7b7b;font-size:12px;margin-top:6px;min-height:14px}
 #hint{font-size:11px;color:#777;margin-top:10px}
 </style>
 </head>
@@ -133,12 +147,37 @@ summary{cursor:pointer;color:#aaa;font-size:12px;margin:4px 0}
     <button id="fitBtn" title="Fit the whole design to the screen (F)">Fit</button>
     <button id="dimBtn" title="Show/hide dimensions (D)">Dims</button>
     <button id="importPdf" title="Import a cutter profile from a PDF (or drop a PDF on the canvas)">Import PDF</button><input type="file" id="pdfIn" accept=".pdf,application/pdf" hidden>
-    <button id="downloadSvg">SVG</button>
-    <button id="downloadPdf">PDF</button>
-    <button id="downloadPdfAnnotated">PDF + Dims</button>
+    <div id="exp"><button id="expBtn">Export ▾</button>
+      <div id="expMenu" hidden>
+        <button id="downloadSvg">SVG — cutter file</button>
+        <button id="downloadPdf">PDF — cutter file</button>
+        <button id="downloadPdfAnnotated">PDF — colour dimension sheet</button>
+        <button id="downloadA4">PDF — A4 formal sheet (client, job no., logo…)</button>
+      </div></div>
   </div>
 </div>
 
+<div id="a4Modal" hidden>
+  <div class="card">
+    <h3 style="margin:0 0 10px">A4 formal sheet</h3>
+    <div class="g">
+      <label style="grid-column:span 4">Client name<input id="jClient" type="text" autocomplete="off"></label>
+      <label class="s2">Job number<input id="jJob" type="text" autocomplete="off"></label>
+      <label class="s2">Cutter ID<input id="jCutter" type="text" autocomplete="off"></label>
+      <label class="s2">Date<input id="jDate" type="text" placeholder="today" autocomplete="off"></label>
+      <label class="s2">Notes<input id="jNotes" type="text" placeholder="optional" autocomplete="off"></label>
+    </div>
+    <div class="logoRow">
+      <label class="fbtn" for="jLogo">&#128193; Choose logo file…</label>
+      <input id="jLogo" type="file" accept="image/*,.png,.jpg,.jpeg,.svg,.webp,.gif" hidden>
+      <img id="jLogoPrev" hidden alt="logo">
+      <span id="jLogoName">No logo selected (drop an image here too)</span>
+      <button id="jLogoX" hidden>Remove</button>
+    </div>
+    <div id="jLogoMsg"></div>
+    <div class="btns" style="justify-content:flex-end;margin-top:14px"><button id="a4Cancel">Cancel</button><button id="a4Go" class="pri">Export PDF</button></div>
+  </div>
+</div>
 <script>/* pdf.js 3.11.174 (Apache-2.0), inlined for offline use */
 /**
  * @licstart The following is the entire license notice for the
@@ -1311,6 +1350,257 @@ document.getElementById("downloadPdfAnnotated").onclick = () => {
   document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
 };
 
+/* ───────── Formal A4 sheet: job details, logo, schedule, title block ───────── */
+const JOB_KEY = "cuttermaker.job", job = {client:"",job:"",cutter:"",notes:"",date:"",logo:null,lw:0,lh:0};
+try { Object.assign(job, JSON.parse(localStorage.getItem(JOB_KEY)||"{}")); } catch(e) {}
+const jobSave = () => { try { localStorage.setItem(JOB_KEY, JSON.stringify(job)); } catch(e) {} };
+[["jClient","client"],["jJob","job"],["jCutter","cutter"],["jNotes","notes"],["jDate","date"]].forEach(([id,k]) => { $(id).value=job[k]||""; $(id).oninput=()=>{ job[k]=$(id).value; jobSave(); }; });
+function logoUI() {
+  const im=$("jLogoPrev"); im.hidden=!job.logo; if (job.logo) im.src=job.logo; $("jLogoX").hidden=!job.logo;
+  $("jLogoName").textContent = job.logo ? (job.logoName||"Logo loaded") : "No logo selected (drop an image here too)";
+}
+logoUI();
+function loadLogoFile(f) {
+  if (!f) return; const msg=$("jLogoMsg"); msg.textContent="";
+  if (f.type && !/^image\//.test(f.type)) { msg.textContent="That isn't an image file — choose a PNG, JPG or SVG."; return; }
+  const fr=new FileReader();
+  fr.onerror=()=>{ msg.textContent="Couldn't read that file."; };
+  fr.onload=()=>{
+    const im=new Image();
+    im.onerror=()=>{ msg.textContent="Couldn't open that image — try a PNG or JPG."; };
+    im.onload=()=>{
+      try {
+        let iw=im.naturalWidth||im.width, ih=im.naturalHeight||im.height; if (!iw||!ih) { iw=400; ih=200; }
+        const k=iw>900?900/iw:(/svg/.test(f.type)?Math.min(8,900/iw):1), cv=document.createElement("canvas");
+        cv.width=Math.max(1,Math.round(iw*k)); cv.height=Math.max(1,Math.round(ih*k));
+        const cx=cv.getContext("2d"); cx.fillStyle="#fff"; cx.fillRect(0,0,cv.width,cv.height); cx.drawImage(im,0,0,cv.width,cv.height);
+        job.logo=cv.toDataURL("image/jpeg",0.92); job.lw=cv.width; job.lh=cv.height; job.logoName=f.name; jobSave(); logoUI();
+      } catch (err) { msg.textContent="That image couldn't be used ("+(err&&err.message||err)+"). Try a PNG or JPG."; }
+    };
+    im.src=fr.result;
+  };
+  fr.readAsDataURL(f);
+}
+$("jLogo").onchange = e => { loadLogoFile(e.target.files[0]); e.target.value=""; };
+$("a4Modal").addEventListener("dragover", e => e.preventDefault());
+$("a4Modal").addEventListener("drop", e => { e.preventDefault(); loadLogoFile(e.dataTransfer.files[0]); });
+$("jLogoX").onclick = () => { job.logo=null; job.logoName=""; jobSave(); logoUI(); };
+$("expBtn").onclick = e => { e.stopPropagation(); $("expMenu").hidden=!$("expMenu").hidden; };
+$("expMenu").onclick = () => { $("expMenu").hidden=true; };
+document.addEventListener("click", () => { $("expMenu").hidden=true; });
+
+const exportA4 = () => {
+  const m=72/25.4, f=v=>(+v).toFixed(3), d2=v=>(Math.round(v*100)/100).toFixed(2);
+  const PW=297, PH=210, M=8, pW=PW*m, pH=PH*m, sh=S.placed, BC="#0085ca";
+  const NAVY="0.07 0.12 0.22", GREY="0.42 0.46 0.52", RULE="0.80 0.82 0.86";
+  const hexs=(h,k)=>[1,3,5].map(i=>(Math.min(255,parseInt(h.substr(i,2),16)*(k||1))/255).toFixed(3)).join(" "), hex=h=>hexs(h,1), deep=h=>hexs(h,0.62);
+  const WD={" ":278,".":278,":":278,",":278,"(":333,")":333,"-":333,"/":278,"x":500,"m":833,"R":722,"T":611,"L":556,"B":722,"O":778,"u":556,"t":278,"e":556,"r":333,"P":667,"o":556,"f":278,"i":222,"l":222,"S":667,"h":556,"a":556,"p":556,"M":833,"E":667,"A":667,"U":722,"K":667,"Y":667,"N":722,"C":722,"D":722,"G":778,"I":278,"W":944,"H":722,"n":556,"s":500,"c":500,"d":556,"g":556,"k":500,"b":556,"y":500,"w":722,"v":500,"z":500,"j":222,"q":556,"·":278,"Ø":778,"×":584};
+  const tw=(s,sz,b)=>{ let t=0; for (const c of s) t+=(WD[c]||556); return t*sz/1000*(b?1.06:1); };
+  const esc=s=>Array.from(String(s)).map(c=>{ const k=c.charCodeAt(0); if (c==="\\"||c==="("||c===")") return "\\"+c; if (k>=32&&k<127) return c; if (k>=160&&k<=255) return "\\"+k.toString(8); return "?"; }).join("");
+  const fitSz=(s,sz,maxW,b)=>{ const w=tw(s,sz,b); return w>maxW?sz*maxW/w:sz; };
+  const ops=[], Pp=(a,b)=>f(a)+" "+f(pH-b);
+  const txt=(s,x,y,sz,rgb,bold)=>ops.push(`${rgb} rg BT /${bold?"F2":"F1"} ${f(sz)} Tf 1 0 0 1 ${f(x)} ${f(pH-y)} Tm (${esc(s)}) Tj ET`);
+  const rect=(x,y,w,h,p)=>ops.push(`${f(x)} ${f(pH-y-h)} ${f(w)} ${f(h)} re ${p}`);
+  const line=(x1,y1,x2,y2,rgb,w)=>ops.push(`${rgb} RG ${w} w ${Pp(x1,y1)} m ${Pp(x2,y2)} l S`);
+  const rrp=(x,y,w,h,r,p)=>{ pdfRR(ops,Pp,x,y,w,h,r,r,r,r); ops[ops.length-1]="h "+p; };
+  const ellp=(cx,cy,rx,ry,p)=>{ const k=0.5523,a=rx*k,b=ry*k;
+    ops.push(`${Pp(cx+rx,cy)} m ${Pp(cx+rx,cy-b)} ${Pp(cx+a,cy-ry)} ${Pp(cx,cy-ry)} c ${Pp(cx-a,cy-ry)} ${Pp(cx-rx,cy-b)} ${Pp(cx-rx,cy)} c ${Pp(cx-rx,cy+b)} ${Pp(cx-a,cy+ry)} ${Pp(cx,cy+ry)} c ${Pp(cx+a,cy+ry)} ${Pp(cx+rx,cy+b)} ${Pp(cx+rx,cy)} c h ${p}`); };
+
+  /* describe + group identical shapes (same size/radii share a mark letter and colour) */
+  const rads=(r,all)=>{ const o=[["TL",r.tl],["TR",r.tr],["BR",r.br],["BL",r.bl]].filter(a=>all||a[1]>0.005); return o.length?o.map(a=>`${a[0]} ${d2(a[1]||0)}`).join("  ·  "):""; };
+  const describe=(s,outer)=>{
+    if (s.type==="rect") { const fr=fitR(s.w,s.h,s.r||{}); return {size:`${d2(s.w)} x ${d2(s.h)}`, rad:rads(fr,outer&&(fr.tl+fr.tr+fr.br+fr.bl>0.005)), kind:"Rectangle"}; }
+    if (s.type==="circle") return {size:`Ø${d2(s.w)}`,rad:"",kind:"Circle"};
+    if (s.type==="oval") return {size:`${d2(s.w)} x ${d2(s.h)}`,rad:"",kind:"Oval"};
+    if (s.type==="dash") { const q=fitDash(s); return {size:`Line ${d2(s.orient==="h"?s.w:s.h)}`,rad:`cut ${d2(q.cut)}  ·  tie ${d2(q.tie)}`,kind:"Line"}; }
+    return {size:`${d2(s.w)} x ${d2(s.h)}`,rad:"custom outline",kind:"Custom"};
+  };
+  const mark=i=>String.fromCharCode(65+i%26)+(i>=26?Math.floor(i/26):"");
+  const groups=[], gOf=[];
+  sh.forEach((s,i)=>{ const d=describe(s,false), key=d.size+"|"+d.rad+(s.type==="path"?"|"+i:""); let g=groups.find(x=>x.key===key);
+    if (!g) { g={key,...d,idx:[],letter:mark(groups.length),hex:DIMCOL[groups.length%DIMCOL.length]}; groups.push(g); } g.idx.push(i); gOf[i]=g; });
+  const P0=prof(), od=describe(P0,true);
+
+  /* page regions (paper mm) */
+  const RW=92, rx0=PW-M-RW, HY=M+20, dx0=M+4, dy0=HY+5, dW=rx0-4-dx0, dH=PH-M-4-dy0;
+  const CB=contentBox(), padl=17,padt=15,padr=8,padb=13;
+  const sc=Math.min(5,Math.max(0.01,Math.min((dW-padl-padr)/CB.w,(dH-padt-padb)/CB.h)));
+  const ox0=dx0+padl+((dW-padl-padr)-CB.w*sc)/2-CB.x0*sc, oy0=dy0+padt+((dH-padt-padb)-CB.h*sc)/2-CB.y0*sc;
+  const gx=v=>(ox0+v*sc)*m, gy=v=>(oy0+v*sc)*m, K=sc*m;
+
+  const shapePath=(s,p)=>{
+    if (s.type==="rect") { const r=s.r||{}; pdfRR(ops,Pp,gx(s.x),gy(s.y),s.w*K,s.h*K,(r.tl||0)*K,(r.tr||0)*K,(r.br||0)*K,(r.bl||0)*K); ops[ops.length-1]="h "+p; }
+    else if (s.type==="path") { pdfPath(ops,Pp,s,ox0*m,oy0*m,K); if (s.closed) ops[ops.length-1]="h "+p; }
+    else ellp(gx(s.x+s.w/2),gy(s.y+s.h/2),s.w/2*K,s.h/2*K,p);
+  };
+
+  /* queued labels, placed without overlaps */
+  const Q=[], obst=[], late=[];
+  const pill=(str,cx,cy,hx,rot,sz)=>{
+    const tww=tw(str,sz,true), w=tww+5, h=sz*1.7, bw=rot?h:w, bh=rot?w:h, c=hex(hx);
+    ops.push("q /G9 gs 1 1 1 rg"); rrp(cx-bw/2,cy-bh/2,bw,bh,2,"f"); ops.push("Q");
+    ops.push(`${c} RG 0.7 w`); rrp(cx-bw/2,cy-bh/2,bw,bh,2,"S");
+    ops.push(`${NAVY} rg BT /F2 ${f(sz)} Tf `+(rot?`0 1 -1 0 ${f(cx+sz*0.35)} ${f(pH-cy-tww/2)} Tm`:`1 0 0 1 ${f(cx-tww/2)} ${f(pH-cy-sz*0.35)} Tm`)+` (${esc(str)}) Tj ET`);
+  };
+  const arr=(tx,ty,dx,dy,c,L,W)=>ops.push(`${c} rg 1 1 1 RG 0.4 w ${Pp(tx,ty)} m ${Pp(tx-dx*L-dy*W,ty-dy*L+dx*W)} l ${Pp(tx-dx*L+dy*W,ty-dy*L-dx*W)} l h B`);
+  const dimH=(x1,x2,y,str,hx,sz,lw,lineHex,prio)=>{ const len=Math.abs(x2-x1); if (len<0.8*m) return; sz=sz||6;
+    const c=lineHex?hex(lineHex):deep(hx), L=Math.min(2.2*m,len*.3), W=L*.36, d=x2>x1?1:-1;
+    ops.push(`1 1 1 RG ${(lw||0.6)+1.3} w ${Pp(x1,y)} m ${Pp(x2,y)} l S ${c} RG ${lw||0.6} w ${Pp(x1,y)} m ${Pp(x2,y)} l S`); arr(x1,y,d,0,c,L,W); arr(x2,y,-d,0,c,L,W);
+    Q.push({str,cx:(x1+x2)/2,cy:y,hx,rot:false,sz,axis:"h",a0:Math.min(x1,x2),a1:Math.max(x1,x2),prio:prio||1}); };
+  const dimV=(y1,y2,x,str,hx,sz,lw,lineHex,prio)=>{ const len=Math.abs(y2-y1); if (len<0.8*m) return; sz=sz||6;
+    const c=lineHex?hex(lineHex):deep(hx), L=Math.min(2.2*m,len*.3), W=L*.36, d=y2>y1?1:-1;
+    ops.push(`1 1 1 RG ${(lw||0.6)+1.3} w ${Pp(x,y1)} m ${Pp(x,y2)} l S ${c} RG ${lw||0.6} w ${Pp(x,y1)} m ${Pp(x,y2)} l S`); arr(x,y1,0,d,c,L,W); arr(x,y2,0,-d,c,L,W);
+    Q.push({str,cx:x,cy:(y1+y2)/2,hx,rot:true,sz,axis:"v",a0:Math.min(y1,y2),a1:Math.max(y1,y2),prio:prio||1}); };
+  const ov=(a,b,p)=>a[0]<b[2]+p&&a[2]>b[0]-p&&a[1]<b[3]+p&&a[3]>b[1]-p;
+  function placeLabels() {
+    Q.sort((a,b)=>a.prio-b.prio);
+    const placed=[], lim=[dx0*m,dy0*m,(dx0+dW)*m,(dy0+dH)*m];
+    const busy=r=>obst.some(o=>ov(o,r,1))||placed.some(o=>ov(o,r,1.2));
+    for (const L of Q) {
+      let pick=null;
+      for (let att=0; att<2 && !pick; att++) {
+        const sz=L.sz*(att?0.82:1), w=tw(L.str,sz,true)+5, h=sz*1.7, bw=L.rot?h:w, bh=L.rot?w:h, cs=[[0,0]];
+        if (L.axis) {
+          const hz=L.axis==="h", own=hz?bw:bh, ext=hz?bh:bw, c0=hz?L.cx:L.cy;
+          let lo=L.a0+own/2+2.5-c0, hi=L.a1-own/2-2.5-c0; if (lo>hi) lo=hi=0;
+          const mv=(d,p)=>hz?[d,p]:[p,d];
+          for (let k=1;k<=80;k++) for (const s of [1,-1]) { const d=s*k*2.5; if (d>=lo-.01&&d<=hi+.01) cs.push(mv(d,0)); }
+          for (const ps of [1,-1,2,-2]) { const p=ps*(ext+1.5); cs.push(mv(0,p)); for (let k=1;k<=40;k++) for (const s of [1,-1]) { const d=s*k*2.5; if (d>=lo-.01&&d<=hi+.01) cs.push(mv(d,p)); } }
+        } else for (let r=1;r<=18;r++) for (let a=0;a<8;a++) { const an=a*Math.PI/4+0.4; cs.push([Math.cos(an)*r*3.5,Math.sin(an)*r*3.5]); }
+        cs.sort((p,q)=>(Math.abs(p[0])+Math.abs(p[1])*1.4)-(Math.abs(q[0])+Math.abs(q[1])*1.4));
+        for (const c of cs) { const cx=L.cx+c[0], cy=L.cy+c[1], r=[cx-bw/2,cy-bh/2,cx+bw/2,cy+bh/2];
+          if (r[0]<lim[0]||r[2]>lim[2]||r[1]<lim[1]||r[3]>lim[3]) continue;
+          if (!busy(r)) { pick={cx,cy,r,sz}; break; } }
+      }
+      if (!pick && L.prio>=3) continue;
+      if (!pick) { const w=tw(L.str,L.sz,true)+5, h=L.sz*1.7, bw=L.rot?h:w, bh=L.rot?w:h; pick={cx:L.cx,cy:L.cy,r:[L.cx-bw/2,L.cy-bh/2,L.cx+bw/2,L.cy+bh/2],sz:L.sz}; }
+      placed.push(pick.r);
+      if (L.leader) line(L.leader[0],L.leader[1],pick.cx,pick.cy,hex(BC),0.5);
+      pill(L.str,pick.cx,pick.cy,L.hx,L.rot,pick.sz);
+    }
+  }
+
+  /* 1 ▸ frame, header */
+  ops.push(`${NAVY} RG 0.9 w`); rect(M*m,M*m,(PW-2*M)*m,(PH-2*M)*m,"S");
+  line((M)*m,HY*m,(PW-M)*m,HY*m,NAVY,0.9);
+  ops.push(`${hex(BC)} rg`); rect(M*m,HY*m,(PW-2*M)*m,1.1*m,"f");
+  let tx=M+5;
+  if (job.logo) {
+    const bw=48, bh=14, ar=(job.lw||1)/(job.lh||1); let lw=bw, lh=bw/ar; if (lh>bh) { lh=bh; lw=bh*ar; }
+    ops.push(`q ${f(lw*m)} 0 0 ${f(lh*m)} ${f((M+5)*m)} ${f(pH-(M+3+(bh-lh)/2+lh)*m)} cm /Im1 Do Q`); tx=M+5+lw+6;
+  }
+  txt("CUTTER PROFILE",tx*m,(M+10.2)*m,17,NAVY,true);
+  txt("Dimension & specification sheet",tx*m,(M+15.6)*m,8,GREY,false);
+  const idv=job.cutter||"—", bx=PW-M-62;
+  ops.push(`${RULE} RG 0.6 w`); rect(bx*m,(M+3)*m,58*m,13.5*m,"S");
+  txt("CUTTER ID",(bx+3)*m,(M+7.2)*m,6,GREY,true);
+  txt(idv,(bx+3)*m,(M+14)*m,fitSz(idv,14,52*m,true),NAVY,true);
+
+  /* 2 ▸ drawing */
+  line(rx0*m,HY*m,rx0*m,(PH-M)*m,NAVY,0.9);
+  ops.push("0.975 0.98 0.985 rg"); shapePath(P0,"f");
+  sh.forEach((s,i)=>{
+    const hx=gOf[i].hex;
+    if (s.type==="dash") { const q=fitDash(s); ops.push(`${deep(hx)} RG 1.6 w 0 J ${q.tie>0?`[${f(q.cut*K)} ${f(q.tie*K)}] 0 d `:""}${Pp(gx(s.x),gy(s.y))} m ${Pp(gx(s.x+s.w),gy(s.y+s.h))} l S [] 0 d`); }
+    else { if (!(s.type==="path"&&!s.closed)) { ops.push(`q /G5 gs ${hex(hx)} rg`); shapePath(s,"f"); ops.push("Q"); } ops.push(`${deep(hx)} RG 0.9 w`); shapePath(s,"S"); }
+  });
+  ops.push(`${hex(BC)} RG 1.4 w`); shapePath(P0,"S");
+  for (const g of computeGaps()) { if (g.ax===0) dimH(gx(g.from),gx(g.to),gy(g.mid),d2(g.g),"#9aa3af",5,0.4,"#5b6470",3); else dimV(gy(g.from),gy(g.to),gx(g.mid),d2(g.g),"#9aa3af",5,0.4,"#5b6470",3); }
+  const corners=s=>[["tl",s.x,s.y,1,1],["tr",s.x+s.w,s.y,-1,1],["br",s.x+s.w,s.y+s.h,-1,-1],["bl",s.x,s.y+s.h,1,-1]];
+  sh.forEach((s,i)=>{
+    const g=gOf[i], hx=g.hex, first=g.idx[0]===i, cxm=s.x+s.w/2, cym=s.y+s.h/2, round=s.type==="circle"||s.type==="oval";
+    if (first) {
+      if (s.type==="dash") { const q=fitDash(s), len=s.orient==="h"?s.w:s.h, str=`${d2(len)}   cut ${d2(q.cut)} / tie ${d2(q.tie)}`;
+        if (s.orient==="h") dimH(gx(s.x),gx(s.x+s.w),gy(s.y)-3*m,str,hx,5.6); else dimV(gy(s.y),gy(s.y+s.h),gx(s.x)-3*m,str,hx,5.6); }
+      else if (round) { dimH(gx(s.x),gx(s.x+s.w),gy(cym),(s.type==="circle"?"Ø":"")+d2(s.w),hx,5.6); if (s.type==="oval") dimV(gy(s.y),gy(s.y+s.h),gx(cxm),d2(s.h),hx,5.6); }
+      else { dimH(gx(s.x),gx(s.x+s.w),gy(s.y+s.h*.74),d2(s.w),hx,5.6); dimV(gy(s.y),gy(s.y+s.h),gx(s.x+s.w*.26),d2(s.h),hx,5.6); }
+      if (s.type==="rect" && Math.min(s.w,s.h)*sc>=9) {
+        const fr=fitR(s.w,s.h,s.r||{});
+        for (const [k,cx,cy,sx,sy] of corners(s)) { const r=fr[k]; if (r<0.005) continue; const str="R"+d2(r), wmm=(tw(str,5.2,true)+5)/m;
+          Q.push({str,cx:gx(cx+sx*r*.29)+sx*(1+wmm/2)*m,cy:gy(cy+sy*r*.29)+sy*2.6*m,hx,rot:false,sz:5.2,axis:null,prio:2}); }
+      }
+    }
+    if (s.type!=="dash" && Math.min(s.w,s.h)*sc>=5) {
+      const bxm=round?(s.type==="oval"?cxm-s.w*.2:cxm+s.w*.2):cxm, bym=round?cym-s.h*.2:cym, X=gx(bxm), Y=gy(bym), r=2*m;
+      obst.push([X-r-1,Y-r-1,X+r+1,Y+r+1]);
+      late.push(()=>{ ops.push(`${hex(hx)} rg ${NAVY} RG 0.5 w`); ellp(X,Y,r,r,"B"); txt(g.letter,X-tw(g.letter,6.6,true)/2,Y+2.3,6.6,NAVY,true); });
+    }
+  });
+  const circ=S.profileType==="circle", topY=gy(CB.y0), leftX=gx(CB.x0);
+  const ext=(x1,y1,x2,y2)=>line(x1,y1,x2,y2,hex(BC),0.35);
+  ext(gx(0),gy(0)-1*m,gx(0),topY-10.5*m); ext(gx(S.mw),gy(0)-1*m,gx(S.mw),topY-10.5*m);
+  dimH(gx(0),gx(S.mw),topY-9*m,(circ?"Ø":"")+d2(S.mw),BC,7,0.8,BC,0);
+  if (!circ) { ext(gx(0)-1*m,gy(0),leftX-10.5*m,gy(0)); ext(gx(0)-1*m,gy(S.mh),leftX-10.5*m,gy(S.mh)); dimV(gy(0),gy(S.mh),leftX-9*m,d2(S.mh),BC,7,0.8,BC,0); }
+  if (S.profileType==="rect") {
+    const fr=fitR(S.mw,S.mh,S.profileR);
+    for (const [k,cx,cy,sx,sy] of corners({x:0,y:0,w:S.mw,h:S.mh})) { const r=fr[k]; if (r<0.005) continue;
+      Q.push({str:"R"+d2(r),cx:gx(cx)+sx*(r*sc*.4+10)*m,cy:gy(cy)-sy*4.6*m,hx:BC,rot:false,sz:6,axis:null,prio:0,leader:[gx(cx+sx*r*.2929),gy(cy+sy*r*.2929)]}); }
+  }
+  late.forEach(fn=>fn()); placeLabels();
+  txt("ALL DIMENSIONS IN MILLIMETRES",(dx0+1)*m,(PH-M-2)*m,5.5,GREY,true);
+
+  /* 3 ▸ schedule (right panel) */
+  const nT=job.notes?8:7, tbH=nT*7, sY0=HY+5, sY1=PH-M-tbH-4, sx0=rx0+4, sW=RW-8;
+  txt("SCHEDULE OF SHAPES",sx0*m,(sY0+3.6)*m,8.5,NAVY,true);
+  const cols=[0,15,26], hdY=sY0+6;
+  ops.push(`${NAVY} rg`); rect(sx0*m,hdY*m,sW*m,6*m,"f");
+  [["MARK",0],["QTY",15],["SIZE (mm) / NOTES",26]].forEach(([s,c])=>txt(s,(sx0+c+2)*m,(hdY+4)*m,6.2,"1 1 1",true));
+  const items=[{letter:"OP",hex:BC,qty:1,size:od.size,rad:od.rad,kind:"Outer profile"}].concat(groups.map(g=>({letter:g.letter,hex:g.hex,qty:g.idx.length,size:g.size,rad:g.rad,kind:g.kind})));
+  const base=items.map(r=>r.rad?9.2:6.4), avail=sY1-(hdY+6), fs=Math.max(0.55,Math.min(1,avail/base.reduce((a,b)=>a+b,0)));
+  let ry=hdY+6;
+  items.forEach((r,j)=>{
+    const h=base[j]*fs;
+    if (j%2) { ops.push("0.955 0.96 0.97 rg"); rect(sx0*m,ry*m,sW*m,h*m,"f"); }
+    const sq=Math.min(5.2,h-1.6);
+    ops.push(`${hex(r.hex)} rg ${NAVY} RG 0.4 w`); rrp((sx0+2)*m,(ry+(h-sq)/2)*m,(r.letter.length>1?7.6:sq)*m*(r.letter.length>1?1:1),sq*m,1.2*m,"B");
+    txt(r.letter,(sx0+2)*m+((r.letter.length>1?7.6:sq)*m-tw(r.letter,6.4,true))/2,(ry+h/2+1)*m,6.4,NAVY,true);
+    txt(String(r.qty),(sx0+cols[1]+2)*m,(ry+h/2+(r.rad?-0.2:1.1))*m,7.4*Math.max(fs,.7),NAVY,true);
+    const sz1=fitSz(r.size+(r.kind?"":""),7.4*Math.max(fs,.7),(sW-cols[2]-3)*m,true);
+    txt(r.size,(sx0+cols[2]+2)*m,(ry+(r.rad?h*0.42:h/2+1.1))*m,sz1,NAVY,true);
+    if (r.rad) txt(r.rad,(sx0+cols[2]+2)*m,(ry+h*0.8)*m,fitSz(r.rad,5.8*Math.max(fs,.8),(sW-cols[2]-3)*m,false),GREY,false);
+    line(sx0*m,(ry+h)*m,(sx0+sW)*m,(ry+h)*m,RULE,0.4);
+    ry+=h;
+  });
+  if (fs<1) txt(fs<0.7?"Equal shapes are grouped by mark":"",sx0*m,(sY1+2.6)*m,5,GREY,false);
+
+  /* 4 ▸ title block */
+  const tY=PH-M-tbH, today=job.date||new Date().toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"});
+  ops.push(`${NAVY} RG 0.9 w`); rect(rx0*m,tY*m,RW*m,tbH*m,"S");
+  const tbRows=[["CLIENT",job.client||"—"],["JOB NUMBER",job.job||"—"],["CUTTER ID",job.cutter||"—"],["DATE",today],
+    ["OVERALL SIZE",`${d2(CB.w)} x ${d2(CB.h)} mm`],["SCALE",sc>=0.995&&sc<=1.005?"1:1":(sc<1?`1:${(1/sc).toFixed(2)}`:`${sc.toFixed(2)}:1`)+" (on sheet)"],["SHEET","1 of 1  ·  A4 landscape"]];
+  if (job.notes) tbRows.splice(4,0,["NOTES",job.notes]);
+  tbRows.forEach((r,i)=>{
+    const y=tY+i*7;
+    if (i) line(rx0*m,y*m,(rx0+RW)*m,y*m,RULE,0.5);
+    ops.push("0.955 0.96 0.97 rg"); rect(rx0*m,y*m,27*m,7*m,"f");
+    line((rx0+27)*m,y*m,(rx0+27)*m,(y+7)*m,RULE,0.5);
+    txt(r[0],(rx0+2.5)*m,(y+4.5)*m,5.8,GREY,true);
+    const big=(i<3); txt(r[1],(rx0+30)*m,(y+4.7)*m,fitSz(r[1],big?9:7.6,(RW-33)*m,big),NAVY,big);
+  });
+
+  /* PDF assembly (binary-safe, optional JPEG logo) */
+  const content=ops.join("\n"), enc=new TextEncoder(), chunks=[]; let pos=0;
+  const put=b=>{ const u=typeof b==="string"?enc.encode(b):b; chunks.push(u); pos+=u.length; }, offs=[];
+  const obj=(n,body,bytes)=>{ offs[n]=pos; put(`${n} 0 obj\n${body}`); if (bytes) { put("\nstream\n"); put(bytes); put("\nendstream"); } put("\nendobj\n"); };
+  let imgBytes=null; if (job.logo) { const b=atob(job.logo.split(",")[1]); imgBytes=new Uint8Array(b.length); for (let i=0;i<b.length;i++) imgBytes[i]=b.charCodeAt(i); }
+  const nObj=imgBytes?7:6;
+  put("%PDF-1.4\n%\xE2\xE3\xCF\xD3\n");
+  obj(1,"<< /Type /Catalog /Pages 2 0 R >>"); obj(2,"<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+  obj(3,`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${f(pW)} ${f(pH)}] /Contents 4 0 R /Resources << /Font << /F1 5 0 R /F2 6 0 R >> ${imgBytes?"/XObject << /Im1 7 0 R >> ":""}/ExtGState << /G5 << /ca 0.28 /CA 1 >> /G9 << /ca 0.95 /CA 1 >> >> >> >>`);
+  obj(4,`<< /Length ${enc.encode(content).length} >>`,enc.encode(content));
+  obj(5,"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>"); obj(6,"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>");
+  if (imgBytes) obj(7,`<< /Type /XObject /Subtype /Image /Width ${job.lw} /Height ${job.lh} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${imgBytes.length} >>`,imgBytes);
+  const xr=pos; put(`xref\n0 ${nObj+1}\n0000000000 65535 f \n`); for (let i=1;i<=nObj;i++) put(String(offs[i]).padStart(10,"0")+" 00000 n \n");
+  put(`trailer\n<< /Size ${nObj+1} /Root 1 0 R >>\nstartxref\n${xr}\n%%EOF`);
+  const url=URL.createObjectURL(new Blob(chunks,{type:"application/pdf"})), a=document.createElement("a");
+  a.href=url; a.download=((job.cutter||job.job||"cutter")+"-A4-sheet.pdf").replace(/[^\w.\-]+/g,"_"); document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+};
+
+$("downloadA4").onclick = () => { $("jLogoMsg").textContent=""; $("a4Modal").hidden=false; $("jClient").focus(); };
+$("a4Cancel").onclick = () => { $("a4Modal").hidden=true; };
+$("a4Go").onclick = () => { $("a4Modal").hidden=true; exportA4(); };
+$("a4Modal").addEventListener("keydown", e => { if (e.key==="Escape") $("a4Modal").hidden=true; });
+$("a4Modal").addEventListener("mousedown", e => { if (e.target===$("a4Modal")) $("a4Modal").hidden=true; });
 profUI(); addUI(); readProfile();
 </script>
 </body>
