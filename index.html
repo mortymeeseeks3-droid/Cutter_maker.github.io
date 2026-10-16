@@ -249,7 +249,7 @@ body.pf #dimKey{display:none}
 "use strict";
 const $ = id => document.getElementById(id);
 const c = $("c"), x = c.getContext("2d");
-const S = { profileType:"rect", mw:100, mh:100, profileR:{tl:2,tr:2,br:2,bl:2}, profilePath:null, profileDash:null, profileEdges:null, placed:[], scale:1, ox:0, oy:0 };
+const S = { profileType:"rect", mw:100, mh:100, profileR:{tl:2,tr:2,br:2,bl:2}, profilePath:null, profileRadii:null, profileDash:null, profileEdges:null, placed:[], scale:1, ox:0, oy:0 };
 let sel = -1, drag = null, guides = [], issues = [], undoStack = [];
 const num = (id, d=0) => { const v = parseFloat($(id).value); return isFinite(v) ? v : d; };
 const R = v => Math.round(v*1e4)/1e4;
@@ -320,7 +320,7 @@ function contentBox() {
   for (const s of S.placed) { x0=Math.min(x0,s.x); y0=Math.min(y0,s.y); x1=Math.max(x1,s.x+s.w); y1=Math.max(y1,s.y+s.h); }
   return {x0,y0,x1,y1,w:x1-x0,h:y1-y0};
 }
-const prof = () => S.profileType==="path" ? {type:"path",x:0,y:0,w:S.mw,h:S.mh,segs:S.profilePath,closed:true,dash:S.profileDash,isProfile:true} : ({ type:S.profileType==="rect"?"rect":"oval", x:0, y:0, w:S.mw, h:S.mh, r:S.profileR, dash:S.profileDash, edges:S.profileType==="rect"?S.profileEdges:null, isProfile:true });
+const prof = () => S.profileType==="path" ? {type:"path",x:0,y:0,w:S.mw,h:S.mh,segs:S.profilePath,closed:true,dash:S.profileDash,isProfile:true,radii:S.profileRadii} : ({ type:S.profileType==="rect"?"rect":"oval", x:0, y:0, w:S.mw, h:S.mh, r:S.profileR, dash:S.profileDash, edges:S.profileType==="rect"?S.profileEdges:null, isProfile:true });
 
 /* Dashed line: keep the tie exact, adjust the cut so the line starts AND ends on a cut */
 function fitDash(r) {
@@ -507,9 +507,23 @@ function drawDims() {
       txt("R"+fm(v),px,py,col,false,sx>0?"left":"right",sy>0?"top":"bottom");
     }
   };
+  const pathDimsScreen=(s,col)=>{
+    const D=pathDims(s), off=11;
+    for (const L of D.lines) {
+      const a=[X(L.x0),Y(L.y0)], b=[X(L.x1),Y(L.y1)], px=Math.hypot(b[0]-a[0],b[1]-a[1]); if (px<22) continue;
+      const ox=L.nx*off, oy=L.ny*off, a2=[a[0]+ox,a[1]+oy], b2=[b[0]+ox,b[1]+oy], ux=(b[0]-a[0])/px, uy=(b[1]-a[1])/px;
+      x.strokeStyle=col; x.lineWidth=1; x.beginPath(); x.moveTo(a[0],a[1]); x.lineTo(a[0]+ox*1.3,a[1]+oy*1.3); x.moveTo(b[0],b[1]); x.lineTo(b[0]+ox*1.3,b[1]+oy*1.3); x.moveTo(a2[0],a2[1]); x.lineTo(b2[0],b2[1]); x.stroke();
+      arrow(a2[0],a2[1],ux,uy,col); arrow(b2[0],b2[1],-ux,-uy,col);
+      x.save(); x.translate((a2[0]+b2[0])/2,(a2[1]+b2[1])/2); let ang=Math.atan2(b2[1]-a2[1],b2[0]-a2[0]); if (Math.abs(ang)>Math.PI/2) ang+=Math.PI; x.rotate(ang);
+      x.textAlign="center"; x.textBaseline="bottom"; x.lineWidth=3; x.strokeStyle="rgba(0,0,0,.85)"; x.strokeText(fm(L.len),0,-2); x.fillStyle=col; x.fillText(fm(L.len),0,-2); x.restore();
+    }
+    for (const A of D.arcs) { const px=X(A.mx)+A.nx*18, py=Y(A.my)+A.ny*18; x.strokeStyle=col; x.lineWidth=1; x.beginPath(); x.moveTo(X(A.mx),Y(A.my)); x.lineTo(px,py); x.stroke(); txt("R"+fm(A.r),px,py,col,false); }
+    for (const C of D.circles) txt("Ø"+fm(2*C.r),X(C.cx),Y(C.cy),col,false);
+  };
   const list=S.placed.map((s,i)=>({s,i})).filter(o=>!dim.sel||o.i===sel);
   const showOuter=!dim.sel||sel<0, bc="#4da3ff";
   if (showOuter) {
+    if (dim.size && S.profileType==="path") pathDimsScreen(prof(),"#4da3ff");
     if (dim.size) {
       hd(X(0),X(S.mw),Y(0)-14,(S.profileType==="circle"?"Ø":"")+fm(S.mw)+"mm",bc,0,10);
       if (S.profileType!=="circle") vd(Y(0),Y(S.mh),X(0)-14,fm(S.mh)+"mm",bc,0,10);
@@ -530,6 +544,7 @@ function drawDims() {
       }
     }
     if (dim.rad) radii(s,col);
+    if (dim.size && s.type==="path" && s.closed) pathDimsScreen(s,col);
   }
   if (dim.size) for (const r of dashRecords()) {
     if (r.name==="Line" || (dim.sel && !(r.idx===sel || (r.idx<0 && sel<0)))) continue;
@@ -590,6 +605,7 @@ function dr() {
   });
   const hl=(pc,col)=>{ x.save(); x.setLineDash([]); x.lineWidth=5*px; x.strokeStyle=col; x.globalAlpha=.85; x.stroke(new Path2D(pc.d)); x.restore(); };
   if (sel>=0 && selEdge && S.placed[sel] && S.placed[sel].type==="rect") { const pc=edgePieces(S.placed[sel]).find(q=>q.k===selEdge); if (pc) hl(pc,"#ffffff"); }
+  if (selSet.has(-1)) hl({d:shapeD(prof())},"#00ffff");
   if (selPE==="all") hl({d:shapeD(prof())},"#ffb020");
   else if (selPE && S.profileType==="rect") { const pc=edgePieces(prof()).find(q=>q.k===selPE); if (pc) hl(pc,"#ffb020"); }
   x.lineWidth = px; x.strokeStyle = "#00ff99"; x.setLineDash([4*px,4*px]);
@@ -613,13 +629,13 @@ function dr() {
 }
 
 /* ───────── Undo ───────── */
-const stateStr = () => JSON.stringify({t:S.profileType,w:S.mw,h:S.mh,r:S.profileR,p:S.placed,pp:S.profilePath,pd:S.profileDash,pe:S.profileEdges});
+const stateStr = () => JSON.stringify({t:S.profileType,w:S.mw,h:S.mh,r:S.profileR,p:S.placed,pp:S.profilePath,pd:S.profileDash,pe:S.profileEdges,pr:S.profileRadii});
 function pushUndo() { const s=stateStr(); if (undoStack[undoStack.length-1]!==s) { undoStack.push(s); if (undoStack.length>100) undoStack.shift(); } }
 function undo() {
   let s; do { s = undoStack.pop(); } while (s!==undefined && s===stateStr());
   if (s===undefined) return;
   const o=JSON.parse(s);
-  S.profileType=o.t; S.mw=o.w; S.mh=o.h; S.profileR=o.r; S.placed=o.p; S.profilePath=o.pp||null; S.profileDash=o.pd||null; S.profileEdges=o.pe||null; syncDashUI();
+  S.profileType=o.t; S.mw=o.w; S.mh=o.h; S.profileR=o.r; S.placed=o.p; S.profilePath=o.pp||null; S.profileDash=o.pd||null; S.profileEdges=o.pe||null; S.profileRadii=o.pr||null; syncDashUI();
   $("pShape").value=o.t; $("pW").value=o.w; $("pH").value=o.h;
   $("pTL").value=o.r.tl; $("pTR").value=o.r.tr; $("pBR").value=o.r.br; $("pBL").value=o.r.bl;
   profUI(); select(-1); rs();
@@ -841,15 +857,15 @@ function bRectLoop(s) {
   const r=fitR(s.w,s.h,s.r||{}), x=s.x, y=s.y, w=s.w, h=s.h, PI=Math.PI, L=[]; let cur=[x+r.tl,y];
   const line=p=>{ if (Math.hypot(p[0]-cur[0],p[1]-cur[1])>1e-9) L.push({k:"L",p0:cur,p1:p}); cur=p; };
   const arc=(cx,cy,rd,a0,a1)=>{ if (rd<1e-9) return; const p0=[cx+rd*Math.cos(a0),cy+rd*Math.sin(a0)], p3=[cx+rd*Math.cos(a1),cy+rd*Math.sin(a1)]; line(p0);
-    L.push({k:"C",p0,c1:[p0[0]-BK*rd*Math.sin(a0),p0[1]+BK*rd*Math.cos(a0)],c2:[p3[0]+BK*rd*Math.sin(a1),p3[1]-BK*rd*Math.cos(a1)],p1:p3}); cur=p3; };
+    L.push({k:"C",p0,c1:[p0[0]-BK*rd*Math.sin(a0),p0[1]+BK*rd*Math.cos(a0)],c2:[p3[0]+BK*rd*Math.sin(a1),p3[1]-BK*rd*Math.cos(a1)],p1:p3,rad:rd}); cur=p3; };
   line([x+w-r.tr,y]); arc(x+w-r.tr,y+r.tr,r.tr,1.5*PI,2*PI); line([x+w,y+h-r.br]); arc(x+w-r.br,y+h-r.br,r.br,0,.5*PI);
   line([x+r.bl,y+h]); arc(x+r.bl,y+h-r.bl,r.bl,.5*PI,PI); line([x,y+r.tl]); arc(x+r.tl,y+r.tl,r.tl,PI,1.5*PI); line([x+r.tl,y]);
   return L;
 }
 function bEllLoop(s) {
-  const cx=s.x+s.w/2, cy=s.y+s.h/2, rx=s.w/2, ry=s.h/2, k=BK;
-  return [{k:"C",p0:[cx-rx,cy],c1:[cx-rx,cy-k*ry],c2:[cx-k*rx,cy-ry],p1:[cx,cy-ry]},{k:"C",p0:[cx,cy-ry],c1:[cx+k*rx,cy-ry],c2:[cx+rx,cy-k*ry],p1:[cx+rx,cy]},
-          {k:"C",p0:[cx+rx,cy],c1:[cx+rx,cy+k*ry],c2:[cx+k*rx,cy+ry],p1:[cx,cy+ry]},{k:"C",p0:[cx,cy+ry],c1:[cx-k*rx,cy+ry],c2:[cx-rx,cy+k*ry],p1:[cx-rx,cy]}];
+  const cx=s.x+s.w/2, cy=s.y+s.h/2, rx=s.w/2, ry=s.h/2, k=BK, rd=Math.abs(rx-ry)<1e-9?rx:0;
+  return [{k:"C",p0:[cx-rx,cy],c1:[cx-rx,cy-k*ry],c2:[cx-k*rx,cy-ry],p1:[cx,cy-ry],rad:rd},{k:"C",p0:[cx,cy-ry],c1:[cx+k*rx,cy-ry],c2:[cx+rx,cy-k*ry],p1:[cx+rx,cy],rad:rd},
+          {k:"C",p0:[cx+rx,cy],c1:[cx+rx,cy+k*ry],c2:[cx+k*rx,cy+ry],p1:[cx,cy+ry],rad:rd},{k:"C",p0:[cx,cy+ry],c1:[cx-k*rx,cy+ry],c2:[cx-rx,cy+k*ry],p1:[cx-rx,cy],rad:rd}];
 }
 function bPathLoops(s) {
   const loops=[]; let cur=null, start=null, pos=null;
@@ -950,12 +966,12 @@ function boolOp(op, list) {
   const polys=loops.map(lp=>lp.map(p=>({a:p.a,b:p.b})));
   const fixed=loops.map((lp,i)=>{ let depth=0; polys.forEach((g,j)=>{ if (j!==i&&bInLoop(g,lp[0].a)) depth++; }); const ar=bArea(polys[i]); return Math.sign(ar)===(depth%2===0?1:-1)?lp:lp.slice().reverse().map(p=>({a:p.b,b:p.a,pid:p.pid,ta:p.tb,tb:p.ta})); });
   /* rebuild: runs on the same original curve become one exact curve piece again */
-  const abs=[];
+  const abs=[], rset=new Set(); list.forEach(s=>(s.radii||[]).forEach(v=>rset.add(v)));
   for (const lp of fixed) {
     let runs=[]; for (const p of lp) { const r=runs[runs.length-1]; if (r&&r.pid===p.pid&&Math.abs(r.tb-p.ta)<1e-7&&Math.hypot(r.b[0]-p.a[0],r.b[1]-p.a[1])<1e-3) { r.b=p.b; r.tb=p.tb; } else runs.push({pid:p.pid,a:p.a,b:p.b,ta:p.ta,tb:p.tb}); }
     if (runs.length>1) { const f=runs[0], l=runs[runs.length-1]; if (f.pid===l.pid&&Math.abs(l.tb-f.ta)<1e-7) runs=[{pid:l.pid,a:l.a,b:f.b,ta:l.ta,tb:f.tb},...runs.slice(1,-1)]; }
     abs.push(["M",runs[0].a[0],runs[0].a[1]]);
-    for (const r of runs) { const pr=reg[r.pid]; abs.push(pr.k==="L"?["L",r.b[0],r.b[1]]:bSub(pr,r.ta,r.tb,r.b)); }
+    for (const r of runs) { const pr=reg[r.pid]; if (pr.k==="C" && pr.rad>0) rset.add(Math.round(pr.rad*1e5)/1e5); abs.push(pr.k==="L"?["L",r.b[0],r.b[1]]:bSub(pr,r.ta,r.tb,r.b)); }
     abs.push(["Z"]);
   }
   /* bounding box + local coordinates */
@@ -963,29 +979,82 @@ function boolOp(op, list) {
   const eat=(x,y)=>{ x0=Math.min(x0,x); y0=Math.min(y0,y); x1=Math.max(x1,x); y1=Math.max(y1,y); };
   for (const g of abs) { if (g[0]==="M"||g[0]==="L") { eat(g[1],g[2]); cx=g[1]; cy=g[2]; } else if (g[0]==="C") { for (let i=1;i<=24;i++) { const t=i/24,u=1-t; eat(u*u*u*cx+3*u*u*t*g[1]+3*u*t*t*g[3]+t*t*t*g[5],u*u*u*cy+3*u*u*t*g[2]+3*u*t*t*g[4]+t*t*t*g[6]); } cx=g[5]; cy=g[6]; } }
   const segs=abs.map(g=>g[0]==="Z"?["Z"]:[g[0],...g.slice(1).map((v,i)=>Math.round((v-(i%2?y0:x0))*1e5)/1e5)]);
-  return {type:"path",x:Math.round(x0*1e5)/1e5,y:Math.round(y0*1e5)/1e5,w:Math.round((x1-x0)*1e5)/1e5,h:Math.round((y1-y0)*1e5)/1e5,segs,closed:true,loops:loops.length,gaps};
+  return {type:"path",x:Math.round(x0*1e5)/1e5,y:Math.round(y0*1e5)/1e5,w:Math.round((x1-x0)*1e5)/1e5,h:Math.round((y1-y0)*1e5)/1e5,segs,closed:true,loops:loops.length,gaps,radii:[...rset]};
 }
 /*BOOL-END*/
 
+/* ---- dimensions of free-form closed outlines (merged / trimmed / imported): every straight side, every arc radius, every round hole ---- */
+function bArcFit(p, depth=0) {
+  const q=t=>bPt(p,t), f=iCirc3(q(0.2),q(0.5),q(0.8));
+  if (f && f.r<1e5) { const tol=0.02+f.r*0.0006; if ([0.02,0.1,0.35,0.65,0.9,0.98].every(t=>Math.abs(Math.hypot(q(t)[0]-f.cx,q(t)[1]-f.cy)-f.r)<=tol)) return [{...f,mid:q(0.5)}]; }
+  if (depth>=2) return null;
+  const [l,r]=iSplit(p), A=bArcFit(l,depth+1), B=A&&bArcFit(r,depth+1); return A&&B?A.concat(B):null;
+}
+function pathDims(s) {
+  const out={lines:[],arcs:[],circles:[]}, loops=bLoopsOf(s); if (!loops) return out;
+  const snapR=r=>{ let best=null, bd=Infinity; for (const q of (s.radii||[])) { const d=Math.abs(q-r); if (d<bd) { bd=d; best=q; } } return (best!==null && bd<=Math.max(0.15,r*0.03)) ? best : Math.round(r*100)/100; };
+  const polys=loops.map(lp=>{ const P=[]; for (const p of lp) { if (p.k==="L") P.push(p.p0); else for (let i=0;i<8;i++) P.push(bPt(p,i/8)); } return P; });
+  const ar=P=>{ let a=0; for (let i=0;i<P.length;i++) { const q=P[(i+1)%P.length]; a+=P[i][0]*q[1]-q[0]*P[i][1]; } return a/2; };
+  const inP=(P,pt)=>{ let c=false; for (let i=0,j=P.length-1;i<P.length;j=i++) { const a=P[i], b=P[j]; if ((a[1]>pt[1])!==(b[1]>pt[1]) && pt[0]<(b[0]-a[0])*(pt[1]-a[1])/(b[1]-a[1])+a[0]) c=!c; } return c; };
+  loops.forEach((lp,li) => {
+    let depth=0; polys.forEach((g,j)=>{ if (j!==li && inP(g,polys[li][0])) depth++; });
+    const f=(ar(polys[li])>0?1:-1)*(depth%2===0?1:-1);                       // sign that makes the normal point away from the material
+    const nrm=(tx,ty)=>{ const l=Math.hypot(tx,ty)||1; return [f*ty/l,-f*tx/l]; };
+    if (lp.every(p=>p.k==="C")) {
+      const cs=lp.map(p=>bArcFit(p));
+      if (cs.every(Boolean)) { const fl=cs.flat(), c0=fl[0]; if (fl.every(q=>Math.hypot(q.cx-c0.cx,q.cy-c0.cy)<0.06&&Math.abs(q.r-c0.r)<0.06)) { out.circles.push({cx:c0.cx,cy:c0.cy,r:snapR(c0.r),hole:depth%2===1}); return; } }
+    }
+    const arcs=[];
+    for (const p of lp) {
+      if (p.k==="L") { const len=Math.hypot(p.p1[0]-p.p0[0],p.p1[1]-p.p0[1]); if (len<1) continue; const n=nrm(p.p1[0]-p.p0[0],p.p1[1]-p.p0[1]); out.lines.push({x0:p.p0[0],y0:p.p0[1],x1:p.p1[0],y1:p.p1[1],len,nx:n[0],ny:n[1]}); }
+      else { const pcs=bArcFit(p); if (!pcs) continue;
+        for (const q of pcs) { if (q.r<0.2) continue; const rx=q.mid[0]-q.cx, ry=q.mid[1]-q.cy, rl=Math.hypot(rx,ry)||1, nt=nrm(p.p1[0]-p.p0[0],p.p1[1]-p.p0[1]), sg=(nt[0]*rx+nt[1]*ry)>0?1:-1;
+          const prev=arcs[arcs.length-1]; if (prev && Math.hypot(prev.cx-q.cx,prev.cy-q.cy)<0.4 && Math.abs(snapR(prev.r)-snapR(q.r))<0.01) continue;
+          arcs.push({cx:q.cx,cy:q.cy,r:snapR(q.r),mx:q.mid[0],my:q.mid[1],nx:sg*rx/rl,ny:sg*ry/rl}); } }
+    }
+    out.arcs.push(...arcs);
+  });
+  return out;
+}
+function pathSummary(s) {
+  if (!(s.type==="path" && s.closed)) return ""; const D=pathDims(s), f2=v=>(Math.round(v*100)/100).toFixed(2), cnt={}, parts=[];
+  if (D.lines.length) parts.push(`${D.lines.length} straight side${D.lines.length>1?"s":""}`);
+  for (const a of D.arcs) { const k="R"+f2(a.r); cnt[k]=(cnt[k]||0)+1; }
+  for (const c of D.circles) { const k="Ø"+f2(2*c.r)+(c.hole?" hole":""); cnt[k]=(cnt[k]||0)+1; }
+  for (const k in cnt) parts.push(k+(cnt[k]>1?" ×"+cnt[k]:""));
+  return parts.join("  ·  ");
+}
+
+
 /* ───────── Pathfinder UI: shift-click shapes, then choose Merge or Trim ───────── */
 const selSet = new Set();
-const pfEligible = i => { const s=S.placed[i]; return !!s && (s.type==="rect"||s.type==="circle"||s.type==="oval"||(s.type==="path"&&s.closed)); };
+const pfName = i => i<0 ? "the outer profile" : "shape "+(i+2);
+const pfEligible = i => { if (i===-1) return true; const s=S.placed[i]; return !!s && (s.type==="rect"||s.type==="circle"||s.type==="oval"||(s.type==="path"&&s.closed)); };
 function updatePf() {
   const n=selSet.size, idx=[...selSet].sort((a,b)=>a-b), el=idx.filter(pfEligible), P=$("pfPop");
   P.hidden=n<2; document.body.classList.toggle("pf",n>=2); if (n<2) return;
-  $("pfCount").textContent=`${n} shapes selected`+(el.length<n?` · ${n-el.length} line(s) ignored`:"");
-  const ok=el.length>=2; $("pfMerge").disabled=$("pfTrim").disabled=$("pfFlip").disabled=!ok;
-  $("pfHint").textContent=ok?`Merge joins them into one outline. Trim cuts shape${el.length>2?"s":""} ${el.slice(1).map(i=>i+2).join(", ")} (in front) out of shape ${el[0]+2} (at the back) — ⇅ swaps front/back.`
+  $("pfCount").textContent=`${n} selected`+(selSet.has(-1)?" (incl. outer profile)":"")+(el.length<n?` · ${n-el.length} line(s) ignored`:"");
+  const ok=el.length>=2; $("pfMerge").disabled=$("pfTrim").disabled=!ok; $("pfFlip").disabled=!ok||el[0]===-1; $("pfFlip").title=el[0]===-1?"The outer profile is always at the back":"Swap which shapes are in front";
+  $("pfHint").textContent=ok?(el[0]===-1?`Merge joins everything into the outer profile. Trim cuts ${el.slice(1).map(pfName).join(", ")} out of the outer profile.`:`Merge joins them into one outline. Trim cuts ${el.slice(1).map(pfName).join(", ")} (in front) out of ${pfName(el[0])} (at the back) — ⇅ swaps front/back.`)
     :"Select at least two closed shapes (rectangles, circles, ovals or closed paths).";
 }
 function pfRun(op) {
   const idx=[...selSet].sort((a,b)=>a-b).filter(pfEligible); if (idx.length<2) return;
   $("pfHint").textContent="Working…";
   setTimeout(() => {
-    const res=boolOp(op, idx.map(i=>S.placed[i]));
+    const res=boolOp(op, idx.map(i=>i<0?prof():S.placed[i]));
     if (res.error) { $("pfHint").textContent="⚠ "+res.error; return; }
+    if (idx[0]===-1) {                                   // the outer profile takes part: the result becomes the new outer profile
+      pushUndo();
+      for (let j=idx.length-1;j>=1;j--) S.placed.splice(idx[j],1);
+      const dx=-res.x, dy=-res.y; S.placed.forEach(s=>{ s.x=R(s.x+dx); s.y=R(s.y+dy); });
+      S.profileType="path"; S.profilePath=res.segs; S.profileRadii=res.radii; S.mw=res.w; S.mh=res.h; S.profileDash=null; S.profileEdges=null;
+      $("pShape").value="path"; $("pW").value=res.w; $("pH").value=res.h; $("auto").checked=false; profUI(); select(-1); rs();
+      $("status").textContent=`${op==="merge"?"Merged into":"Trimmed"} the outer profile${res.loops>1?` (${res.loops} outlines)`:""} — Ctrl+Z to undo`;
+      return;
+    }
     pushUndo();
-    const ns={type:"path",x:res.x,y:res.y,w:res.w,h:res.h,segs:res.segs,closed:true};
+    const ns={type:"path",x:res.x,y:res.y,w:res.w,h:res.h,segs:res.segs,closed:true,radii:res.radii};
     for (let j=idx.length-1;j>=0;j--) S.placed.splice(idx[j],1);
     S.placed.splice(idx[0],0,ns); $("auto").checked=false;
     select(idx[0]);
@@ -1027,10 +1096,11 @@ c.onpointerdown = e => {
   if (best) { i=best.i; k=best.k; }
   else { i=hit(gx,gy); if (i<0) { if (S.profileType==="rect") { const ed=edgeNear(prof(),gx,gy,tol); if (ed) pe=ed.k; } else if (profileNear(gx,gy,tol)) pe="all"; } }
   if (e.shiftKey) {
-    if (i>=0) {
-      if (!selSet.size && sel>=0) selSet.add(sel);
-      if (selSet.has(i)) selSet.delete(i); else selSet.add(i);
-      if (selSet.size<2) { const only=[...selSet][0]; select(only===undefined?-1:only); }
+    let tgt=i; if (tgt<0 && (pe!==null || inside(prof(),gx,gy,-1e-3))) tgt=-1;
+    if (tgt>=0 || tgt===-1) {
+      if (!selSet.size) { if (sel>=0) selSet.add(sel); else if (selPE) selSet.add(-1); }
+      if (selSet.has(tgt)) selSet.delete(tgt); else selSet.add(tgt);
+      if (selSet.size<2) { const only=[...selSet][0]; if (only===-1) { sel=-1; selEdge=null; selPE=null; $("selP").hidden=true; fillLinePanel(); updatePf(); dr(); } else select(only===undefined?-1:only); }
       else { sel=-1; selEdge=null; selPE=null; $("selP").hidden=true; fillLinePanel(); updatePf(); dr(); }
     }
     return;
@@ -1052,7 +1122,7 @@ addEventListener("keydown", e => {
   if (typing) { if (k==="Escape") document.activeElement.blur(); return; }
   if (k.toLowerCase()==="d" && !mod) { setDims(!dim.on); return; }
   if (k.toLowerCase()==="f" && !mod) { rs(); return; }
-  if (selSet.size>1 && (k==="Delete"||k==="Backspace")) { e.preventDefault(); pushUndo(); [...selSet].sort((a,b)=>b-a).forEach(i=>S.placed.splice(i,1)); select(-1); return; }
+  if (selSet.size>1 && (k==="Delete"||k==="Backspace")) { e.preventDefault(); pushUndo(); [...selSet].filter(i=>i>=0).sort((a,b)=>b-a).forEach(i=>S.placed.splice(i,1)); select(-1); return; }
   if (selSet.size>1 && k==="Escape") { select(-1); return; }
   if (sel<0) return;
   const s=S.placed[sel];
@@ -1378,7 +1448,7 @@ function applyImport(res, pn, pages) {
   S.profileType = P.type==="path" ? "path" : P.type;
   if (P.type==="rect") S.profileR={...pr};
   if (P.type==="path") S.profilePath=P.segs;
-  S.profileDash=P.dash||null; S.profileEdges=null; syncDashUI();
+  S.profileDash=P.dash||null; S.profileEdges=null; S.profileRadii=null; syncDashUI();
   S.mw=P.w; S.mh=P.h;
   $("pShape").value=S.profileType; $("pW").value=P.w; $("pH").value=P.h; $("pR").value="";
   if (P.type==="rect") { $("pTL").value=pr.tl; $("pTR").value=pr.tr; $("pBR").value=pr.br; $("pBL").value=pr.bl; }
@@ -1412,6 +1482,7 @@ function pdfPath(ops, P, s, ox, oy, m) {
     if (g[0]==="M") ops.push(P(X(g[1]),Y(g[2]))+" m");
     else if (g[0]==="L") ops.push(P(X(g[1]),Y(g[2]))+" l");
     else if (g[0]==="C") ops.push(P(X(g[1]),Y(g[2]))+" "+P(X(g[3]),Y(g[4]))+" "+P(X(g[5]),Y(g[6]))+" c");
+    else if (g[0]==="Z") ops.push("h");
   }
   ops.push(s.closed?"h S":"S");
 }
@@ -1591,7 +1662,7 @@ document.getElementById("downloadPdfAnnotated").onclick = () => {
   const hex=h=>hexs(h,1), deep=h=>hexs(h,0.62);
   const WD={" ":278,".":278,":":278,",":278,"(":333,")":333,"-":333,"/":278,"x":500,"m":833,"R":722,"T":611,"L":556,"B":722,"O":778,"u":556,"t":278,"e":556,"r":333,"P":667,"o":556,"f":278,"i":222,"l":222,"S":667,"h":556,"a":556,"p":556,"M":833,"E":667,"A":667,"U":722,"K":667,"Y":667,"N":722,"C":722,"D":722,"G":778,"I":278,"W":944,"H":722,"n":556,"s":500,"c":500,"d":556,"g":556,"k":500,"b":556,"y":500,"w":722,"v":500,"z":500,"j":222,"q":556,"·":278,"Ø":778};
   const tw=(s,sz,b)=>{ let t=0; for (const c of s) t+=(WD[c]||556); return t*sz/1000*(b?1.06:1); };
-  const esc=s=>s.replace(/[\\()]/g,"\\$&").replace(/Ø/g,"\\330").replace(/·/g,"\\267");
+  const esc=s=>s.replace(/[\\()]/g,"\\$&").replace(/Ø/g,"\\330").replace(/·/g,"\\267").replace(/×/g,"\\327");
 
   const rads=(r,all)=>{ const o=[["TL",r.tl],["TR",r.tr],["BR",r.br],["BL",r.bl]].filter(a=>all||a[1]>0.005); return o.length?o.map(a=>`${a[0]} ${d2(a[1]||0)}`).join("  ·  "):""; };
   const describe=(s,outer)=>{
@@ -1599,7 +1670,7 @@ document.getElementById("downloadPdfAnnotated").onclick = () => {
     if (s.type==="circle") return {size:`Ø${d2(s.w)}mm`,rad:""};
     if (s.type==="oval") return {size:`${d2(s.w)} x ${d2(s.h)}mm  (oval)`,rad:""};
     if (s.type==="dash") { const q=fitDash(s); return {size:`Line ${d2(s.orient==="h"?s.w:s.h)}mm`,rad:`cut ${d2(q.cut)}  ·  tie ${d2(q.tie)}  ·  ${Math.max(0,Math.round(((s.orient==="h"?s.w:s.h)+q.tie)/(q.cut+q.tie))-1)} ties`}; }
-    return {size:`${d2(s.w)} x ${d2(s.h)}mm  (custom outline)`,rad:""};
+    return {size:`${d2(s.w)} x ${d2(s.h)}mm  (custom outline)`,rad:pathSummary(s)};
   };
   const P0=prof();
   const info=[{name:"Outer Profile",hex:BL,...describe(P0,true),dash:dashSummary(-1)}].concat(sh.map((s,i)=>({name:"Shape "+(i+2),hex:DIMCOL[i%DIMCOL.length],...describe(s,false),dash:dashSummary(i)})));
@@ -1736,6 +1807,22 @@ document.getElementById("downloadPdfAnnotated").onclick = () => {
       }
     }
   });
+
+  const dimA=(a,b,str,hx)=>{ const c=deep(hx), len=Math.hypot(b[0]-a[0],b[1]-a[1]); if (len<0.8*m) return; const ux=(b[0]-a[0])/len, uy=(b[1]-a[1])/len, L=Math.min(2.2*m,len*.3), W=L*.36;
+    ops.push(`1 1 1 RG 1.9 w ${Pp(a[0],a[1])} m ${Pp(b[0],b[1])} l S ${c} RG 0.6 w ${Pp(a[0],a[1])} m ${Pp(b[0],b[1])} l S`); arr(a[0],a[1],ux,uy,c,L,W); arr(b[0],b[1],-ux,-uy,c,L,W);
+    Q.push({str,cx:(a[0]+b[0])/2,cy:(a[1]+b[1])/2,hx,rot:false,sz:5.2,axis:null,prio:1}); };
+  const pathDimsPdf=(s,hx)=>{
+    const D=pathDims(s), off=3.2*m;
+    for (const L of D.lines) {
+      const ax=gx(L.x0)+L.nx*off, ay=gy(L.y0)+L.ny*off, bx=gx(L.x1)+L.nx*off, by=gy(L.y1)+L.ny*off, str=d2(L.len);
+      thin(gx(L.x0),gy(L.y0),ax+L.nx*1.2*m,ay+L.ny*1.2*m,deep(hx),0.3); thin(gx(L.x1),gy(L.y1),bx+L.nx*1.2*m,by+L.ny*1.2*m,deep(hx),0.3);
+      if (Math.abs(L.y0-L.y1)<1e-6) dimH(ax,bx,ay,str,hx,0,5,0.5); else if (Math.abs(L.x0-L.x1)<1e-6) dimV(ay,by,ax,str,hx,0,5,0.5); else dimA([ax,ay],[bx,by],str,hx);
+    }
+    for (const A of D.arcs) Q.push({str:"R"+d2(A.r),cx:gx(A.mx)+A.nx*5*m,cy:gy(A.my)+A.ny*5*m,hx,rot:false,sz:5.2,axis:null,prio:2,leader:[gx(A.mx),gy(A.my)]});
+    for (const C of D.circles) Q.push({str:"Ø"+d2(2*C.r),cx:gx(C.cx),cy:gy(C.cy),hx,rot:false,sz:5.4,axis:null,prio:1});
+  };
+  sh.forEach((s,i)=>{ if (s.type==="path"&&s.closed) pathDimsPdf(s,DIMCOL[i%DIMCOL.length]); });
+  if (S.profileType==="path") pathDimsPdf(P0,BL);
 
   /* 5 ▸ outer profile dimensions (process blue) */
   const circ=S.profileType==="circle";
@@ -1906,7 +1993,7 @@ const exportA4 = async () => {
     if (s.type==="circle") return {size:`Ø${d2(s.w)}`,rad:"",kind:"Circle"};
     if (s.type==="oval") return {size:`${d2(s.w)} x ${d2(s.h)}`,rad:"",kind:"Oval"};
     if (s.type==="dash") { const q=fitDash(s); return {size:`Line ${d2(s.orient==="h"?s.w:s.h)}`,rad:`cut ${d2(q.cut)}  ·  tie ${d2(q.tie)}  ·  ${Math.max(0,Math.round(((s.orient==="h"?s.w:s.h)+q.tie)/(q.cut+q.tie))-1)} ties`,kind:"Line"}; }
-    return {size:`${d2(s.w)} x ${d2(s.h)}`,rad:"custom outline",kind:"Custom"};
+    return {size:`${d2(s.w)} x ${d2(s.h)}`,rad:pathSummary(s)||"custom outline",kind:"Custom"};
   };
   const mark=i=>String.fromCharCode(65+i%26)+(i>=26?Math.floor(i/26):"");
   const groups=[], gOf=[];
@@ -2029,6 +2116,21 @@ const exportA4 = async () => {
     for (const [k,cx,cy,sx,sy] of corners({x:0,y:0,w:S.mw,h:S.mh})) { const r=fr[k]; if (r<0.005) continue;
       Q.push({str:"R"+d2(r),cx:gx(cx)+sx*(r*sc*.4+10)*m,cy:gy(cy)-sy*4.6*m,hx:BC,rot:false,sz:6,axis:null,prio:0,leader:[gx(cx+sx*r*.2929),gy(cy+sy*r*.2929)]}); }
   }
+  const dimA=(a,b,str,hx)=>{ const c=deep(hx), len=Math.hypot(b[0]-a[0],b[1]-a[1]); if (len<0.8*m) return; const ux=(b[0]-a[0])/len, uy=(b[1]-a[1])/len, L=Math.min(2.2*m,len*.3), W=L*.36;
+    ops.push(`1 1 1 RG 1.9 w ${Pp(a[0],a[1])} m ${Pp(b[0],b[1])} l S ${c} RG 0.6 w ${Pp(a[0],a[1])} m ${Pp(b[0],b[1])} l S`); arr(a[0],a[1],ux,uy,c,L,W); arr(b[0],b[1],-ux,-uy,c,L,W);
+    Q.push({str,cx:(a[0]+b[0])/2,cy:(a[1]+b[1])/2,hx,rot:false,sz:5.2,axis:null,prio:1}); };
+  const pathDimsA4=(s,hx)=>{
+    const D=pathDims(s), off=3.2*m;
+    for (const L of D.lines) {
+      const ax=gx(L.x0)+L.nx*off, ay=gy(L.y0)+L.ny*off, bx=gx(L.x1)+L.nx*off, by=gy(L.y1)+L.ny*off, str=d2(L.len);
+      line(gx(L.x0),gy(L.y0),ax+L.nx*1.2*m,ay+L.ny*1.2*m,deep(hx),0.3); line(gx(L.x1),gy(L.y1),bx+L.nx*1.2*m,by+L.ny*1.2*m,deep(hx),0.3);
+      if (Math.abs(L.y0-L.y1)<1e-6) dimH(ax,bx,ay,str,hx,5,0.5); else if (Math.abs(L.x0-L.x1)<1e-6) dimV(ay,by,ax,str,hx,5,0.5); else dimA([ax,ay],[bx,by],str,hx);
+    }
+    for (const A of D.arcs) Q.push({str:"R"+d2(A.r),cx:gx(A.mx)+A.nx*5*m,cy:gy(A.my)+A.ny*5*m,hx,rot:false,sz:5.2,axis:null,prio:2,leader:[gx(A.mx),gy(A.my)]});
+    for (const C of D.circles) Q.push({str:"Ø"+d2(2*C.r),cx:gx(C.cx),cy:gy(C.cy),hx,rot:false,sz:5.4,axis:null,prio:1});
+  };
+  sh.forEach((s,i)=>{ if (s.type==="path"&&s.closed) pathDimsA4(s,gOf[i].hex); });
+  if (S.profileType==="path") pathDimsA4(P0,BC);
   for (const r of dashRecords()) { if (r.name==="Line") continue;
     Q.push({str:`${r.name==="Outline"?"dashed":r.name.replace(" edge","")} · cut ${d2(r.cut)} / tie ${d2(r.tie)}`,cx:gx(r.ax)+r.dir[0]*3*m,cy:gy(r.ay)+r.dir[1]*3*m,hx:r.idx<0?BC:gOf[r.idx].hex,rot:false,sz:5.2,axis:null,prio:1}); }
   late.forEach(fn=>fn()); placeLabels();
