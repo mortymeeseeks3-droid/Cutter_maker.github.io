@@ -85,8 +85,10 @@ body.pf #dimKey{display:none}
       <button id="lnAll"></button>
     </div>
     <div class="lnRow" id="lnDashRow"><label>Cut<input id="lnC" type="number" step="any" value="3"></label><label>Tie<input id="lnT" type="number" step="any" value="1"></label></div>
+    <div class="lnRow" id="lnSpotRow" hidden><label style="flex:1">Dashed line spot colour<select id="lnSpot"><option value="7">7 — 100% Magenta</option><option value="8">8 — 100% Cyan</option></select></label></div>
   </div>
-  <h3 style="margin-top:4px">Outer profile</h3>
+  <div style="font-size:11px;color:#888;margin:4px 0 8px">Select a profile edge or shape line, choose Dashed, then assign spot colour 7 (magenta) or 8 (cyan) for that line.</div>
+  <h3>Outer profile</h3>
   <div class="g">
     <label class="s2">Shape<select id="pShape"><option value="rect">Rectangle</option><option value="circle">Circle</option><option value="oval">Oval</option><option value="path" hidden>Imported outline</option></select></label>
     <label id="pWL"><span id="pWT">Width</span><input id="pW" type="number" step="any" value="100"></label>
@@ -156,6 +158,7 @@ body.pf #dimKey{display:none}
       <label class="s2">Direction<select id="sO"><option value="h">Horizontal</option><option value="v">Vertical</option></select></label>
       <label>Cut<input id="sC" type="number" step="any"></label>
       <label>Tie<input id="sT" type="number" step="any"></label>
+      <label class="s2">Spot colour<select id="sSpot"><option value="7">7 — 100% Magenta</option><option value="8">8 — 100% Cyan</option></select></label>
     </div>
     <div class="btns">
       <button data-a="L" title="Snap to left edge">⇤</button><button data-a="R" title="Snap to right edge">⇥</button>
@@ -388,10 +391,13 @@ function profileNear(gx,gy,tol) {
   if (S.profileType==="path") { const P=flatAbs(prof()); let m=Infinity; for (let i=0;i<P.length;i++) { const a=P[i], b=P[(i+1)%P.length]; m=Math.min(m,segDist(gx,gy,a[0],a[1],b[0],b[1])); } return m<=tol; }
   const a=S.mw/2, b=S.mh/2; return Math.abs(Math.hypot((gx-a)/a,(gy-b)/b)-1)*Math.min(a,b)<=tol;
 }
-function strokePieces(s) {                  // canvas
+const spotHex = n => String(n)==="8" ? "#00ffff" : "#ff00ff";
+function strokePieces(s) {                  // canvas; each dashed edge keeps its own spot-colour assignment
+  const base=x.strokeStyle;
   for (const pc of edgePieces(s,true)) {
     const off=pc.dash&&pc.dash.off, df=pieceDash(pc);
-    x.save(); if (off) { x.globalAlpha=.3; x.setLineDash([3/S.scale,3/S.scale]); } else x.setLineDash(df?[df.cut,df.tie]:[]);
+    x.save(); if (df) x.strokeStyle=spotHex(pc.dash.spot||7); else x.strokeStyle=base;
+    if (off) { x.globalAlpha=.3; x.setLineDash([3/S.scale,3/S.scale]); } else x.setLineDash(df?[df.cut,df.tie]:[]);
     x.stroke(new Path2D(pc.d)); x.restore();
   }
   x.setLineDash([]);
@@ -401,10 +407,11 @@ function svgPieces(s) {
   for (const pc of edgePieces(s,true)) { if (pc.dash&&pc.dash.off) continue; const df=pieceDash(pc); if (df) out+=`<path d="${pc.d}" stroke-dasharray="${R(df.cut)} ${R(df.tie)}"/>`; else solid+=pc.d; }
   return (solid?`<path d="${solid}"/>`:"")+out;
 }
-function pdfEdgePieces(ops,P,s,X,Y,k) {      // PDF writers: X/Y map mm -> pt, k = pt per mm
+function pdfEdgePieces(ops,P,s,X,Y,k,spotDash=null) {      // PDF writers: X/Y map mm -> pt, k = pt per mm
   const K=0.5523;
   for (const pc of edgePieces(s,true)) {
     if (pc.dash&&pc.dash.off) continue; const df=pieceDash(pc);
+    if (spotDash) ops.push(df?`/Spot${pc.dash.spot||7} CS 1 SCN`:'/Spot7 CS 1 SCN');
     ops.push(df?`[${(df.cut*k).toFixed(3)} ${(df.tie*k).toFixed(3)}] 0 d`:"[] 0 d");
     if (pc.kind==="L") ops.push(`${P(X(pc.x0),Y(pc.y0))} m ${P(X(pc.x1),Y(pc.y1))} l S`);
     else { const a0=pc.a0,a1=pc.a1,r=pc.r, p0=[pc.cx+r*Math.cos(a0),pc.cy+r*Math.sin(a0)], p3=[pc.cx+r*Math.cos(a1),pc.cy+r*Math.sin(a1)],
@@ -412,6 +419,7 @@ function pdfEdgePieces(ops,P,s,X,Y,k) {      // PDF writers: X/Y map mm -> pt, k
       ops.push(`${P(X(p0[0]),Y(p0[1]))} m ${P(X(p1[0]),Y(p1[1]))} ${P(X(p2[0]),Y(p2[1]))} ${P(X(p3[0]),Y(p3[1]))} c S`); }
   }
   ops.push("[] 0 d");
+  if (spotDash) ops.push('/Spot7 CS 1 SCN');
 }
 const dashPdf = (s,k) => { const d=dashFit(s); return d?`[${(d.cut*k).toFixed(3)} ${(d.tie*k).toFixed(3)}] 0 d`:null; };
 
@@ -592,16 +600,16 @@ function dr() {
   x.setTransform(d,0,0,d,0,0); x.clearRect(0,0,c.width,c.height);
   x.save(); x.translate(S.ox,S.oy); x.scale(S.scale,S.scale);
   const px = 1/S.scale;
-  x.lineWidth = 2*px; x.strokeStyle = dim.on?"#4da3ff":"#d6d600"; { const PP=prof(); if (pieceMode(PP)) strokePieces(PP); else { const pd=dashFit(PP); if (pd) x.setLineDash([pd.cut,pd.tie]); x.stroke(new Path2D(shapeD(PP))); x.setLineDash([]); } }
+  x.lineWidth = 2*px; x.strokeStyle = dim.on?"#4da3ff":"#d6d600"; { const PP=prof(); if (pieceMode(PP)) strokePieces(PP); else { const pd=dashFit(PP); if (pd) { x.strokeStyle=spotHex(PP.dash.spot||7); x.setLineDash([pd.cut,pd.tie]); } x.stroke(new Path2D(shapeD(PP))); x.setLineDash([]); } }
   S.placed.forEach((s,i) => {
     const bad=issues[i], on=i===sel||selSet.has(i);
     const dc=dim.on?DIMCOL[i%DIMCOL.length]:"#d6d600"; x.strokeStyle = bad?"#ff5555":on?"#00ffff":dc;
     x.fillStyle = bad?"rgba(255,80,80,.14)":on?"rgba(0,255,255,.14)":dc+"22";
     x.lineWidth = (on?2.4:1.6)*px;
     if (s.type==="dash") {
-      const f=fitDash(s); x.setLineDash([f.cut, f.tie]);
+      const f=fitDash(s); x.strokeStyle=spotHex(s.spot||7); x.setLineDash([f.cut, f.tie]);
       x.beginPath(); x.moveTo(s.x,s.y); x.lineTo(s.x+s.w,s.y+s.h); x.stroke(); x.setLineDash([]);
-    } else { const p=new Path2D(shapeD(s)); if (!(s.type==="path"&&!s.closed)) x.fill(p); if (pieceMode(s)) strokePieces(s); else { const sd=dashFit(s); if (sd) x.setLineDash([sd.cut,sd.tie]); x.stroke(p); x.setLineDash([]); } }
+    } else { const p=new Path2D(shapeD(s)); if (!(s.type==="path"&&!s.closed)) x.fill(p); if (pieceMode(s)) strokePieces(s); else { const sd=dashFit(s); if (sd) { x.strokeStyle=spotHex(s.dash.spot||7); x.setLineDash([sd.cut,sd.tie]); } x.stroke(p); x.setLineDash([]); } }
   });
   const hl=(pc,col)=>{ x.save(); x.setLineDash([]); x.lineWidth=5*px; x.strokeStyle=col; x.globalAlpha=.85; x.stroke(new Path2D(pc.d)); x.restore(); };
   if (sel>=0 && selEdge && S.placed[sel] && S.placed[sel].type==="rect") { const pc=edgePieces(S.placed[sel]).find(q=>q.k===selEdge); if (pc) hl(pc,"#ffffff"); }
@@ -768,14 +776,14 @@ function fillSel() {
   fillXY();
   $("sW").value = R(dash?(s.orient==="h"?s.w:s.h):s.w); $("sH").value = R(s.h);
   if (s.type==="rect") { const r=s.r||{}; $("sR").value=""; $("sTL").value=r.tl||0; $("sTR").value=r.tr||0; $("sBR").value=r.br||0; $("sBL").value=r.bl||0; }
-  if (dash) { $("sO").value=s.orient; $("sC").value=s.cut; $("sT").value=s.tie; }
+  if (dash) { $("sO").value=s.orient; $("sC").value=s.cut; $("sT").value=s.tie; $("sSpot").value=String(s.spot||7); }
 }
 function fillXY() { const s=S.placed[sel]; if(!s) return; if (document.activeElement!==$("sX")) $("sX").value=R(s.x); if (document.activeElement!==$("sY")) $("sY").value=R(s.y); }
 function applySel() {
   if (sel<0) return; manualEdit(); const s=S.placed[sel];
   s.x=num("sX",s.x); s.y=num("sY",s.y);
   if (s.type==="dash") {
-    const L=Math.max(.01,num("sW",1)); s.orient=$("sO").value; s.cut=Math.max(.01,num("sC",3)); s.tie=Math.max(0,num("sT",1));
+    const L=Math.max(.01,num("sW",1)); s.orient=$("sO").value; s.cut=Math.max(.01,num("sC",3)); s.tie=Math.max(0,num("sT",1)); s.spot=String($("sSpot").value)==="8"?8:7;
     s.w=s.orient==="h"?L:0; s.h=s.orient==="v"?L:0;
   } else if (s.type==="path") { /* outline geometry is fixed; position only */ }
   else if (s.type==="circle") { s.w=s.h=Math.max(.01,num("sW",s.w)); }
@@ -785,7 +793,7 @@ function applySel() {
   }
   dr();
 }
-["sX","sY","sW","sH","sTL","sTR","sBR","sBL","sO","sC","sT"].forEach(id => $(id).oninput = applySel);
+["sX","sY","sW","sH","sTL","sTR","sBR","sBL","sO","sC","sT"].forEach(id => $(id).oninput = applySel); $("sSpot").onchange=applySel;
 /* ---- compact "line" panel: appears only when a line is selected ---- */
 const PH={type:"rect",get edges(){return S.profileEdges;},set edges(v){S.profileEdges=v;},get dash(){return S.profileDash;},set dash(v){S.profileDash=v;}};
 const ENAME={t:"Top",r:"Right",b:"Bottom",l:"Left"};
@@ -814,14 +822,14 @@ function touching(o,k) {                                // other rectangle sides
   const res=[]; for (const q of cand) { if (q===o) continue; for (const pc of edgePieces(geom(q))) if (pc.kind==="L" && overlapLen(mine,pc)>0.01) res.push([q,pc.k]); }
   return res;
 }
-function lineVal() { return lnMode==="dash"?{cut:Math.max(0.01,num("lnC",3)),tie:Math.max(0,num("lnT",1))}:lnMode==="off"?{off:true}:null; }
-function paintLine() { document.querySelectorAll(".seg button").forEach(b=>b.classList.toggle("act",b.dataset.m===lnMode)); $("lnDashRow").style.display=lnMode==="dash"?"":"none"; }
+function lineVal() { return lnMode==="dash"?{cut:Math.max(0.01,num("lnC",3)),tie:Math.max(0,num("lnT",1)),spot:String($("lnSpot").value)==="8"?8:7}:lnMode==="off"?{off:true}:null; }
+function paintLine() { document.querySelectorAll(".seg button").forEach(b=>b.classList.toggle("act",b.dataset.m===lnMode)); $("lnDashRow").style.display=lnMode==="dash"?"":"none"; $("lnSpotRow").hidden=lnMode!=="dash"; }
 function fillLinePanel() {
   const L=curLine(), P=$("linePanel"); P.hidden=!L; if (!L) return;
   $("lnTitle").textContent=L.title; $("lnOff").style.display=L.rect?"":"none";
   $("lnAll").textContent=L.rect?"All 4 sides":"All of this type"; $("lnAll").title=L.rect?"Give all four sides of this rectangle the same style":"Give every shape of this type the same style";
   const q=L.rect?(L.o.edges?L.o.edges[L.k]:L.o.dash):L.o.dash;
-  lnMode=q?(q.off?"off":"dash"):"solid"; if (q&&q.cut) { $("lnC").value=q.cut; $("lnT").value=q.tie; }
+  lnMode=q?(q.off?"off":"dash"):"solid"; if (q&&q.cut) { $("lnC").value=q.cut; $("lnT").value=q.tie; } $("lnSpot").value=String(q&&q.spot||7);
   const n=L.rect?touching(L.o,L.k).length:0; $("lnLink").textContent=n?`· touches ${n} other line${n>1?"s":""} (changed together)`:"";
   paintLine();
 }
@@ -832,7 +840,7 @@ function applyLine() {
   dr();
 }
 document.querySelectorAll(".seg button").forEach(b => b.onclick = () => { pushUndo(); lnMode=b.dataset.m; paintLine(); applyLine(); });
-["lnC","lnT"].forEach(id => $(id).oninput = () => { if (lnMode==="dash") applyLine(); });
+["lnC","lnT"].forEach(id => $(id).oninput = () => { if (lnMode==="dash") applyLine(); }); $("lnSpot").onchange=()=>{ if (lnMode==="dash") { pushUndo(); applyLine(); } };
 $("lnAll").onclick = () => {
   const L=curLine(); if (!L) return; pushUndo(); const v=lineVal();
   if (L.rect) { L.o.dash=null; L.o.edges=v?{t:v,r:{...v},b:{...v},l:{...v}}:null; for (const k of ["t","r","b","l"]) for (const [q,k2] of touching(L.o,k)) setEdge(q,k2,v?{...v}:null); }
@@ -1522,8 +1530,11 @@ document.getElementById("downloadPdf").onclick = () => {
   function coord(x, y) { return `${fx(x)} ${fy(y)}`; }
 
   const ops = [];
+  const setSpot = name => ops.push(`/Spot${String(name)==='8'?'8':'7'} CS 1 SCN`);
+  const dashSpotOf = d => d && d.spot ? d.spot : 7;
+  const setDashSpot = d => setSpot(dashSpotOf(d));
   ops.push('0.5 w');       // line width
-  ops.push('/CS7 CS 1 SCN');    // stroke in the named spot colour "7" (100% magenta)
+  setSpot('7');            // solid strokes use named spot colour 7 (100% magenta)
   ops.push('[] 0 d');      // solid dash (reset)
 
   const rrPath=(...a)=>pdfRR(ops,coord,...a);
@@ -1538,20 +1549,22 @@ document.getElementById("downloadPdf").onclick = () => {
     ops.push('h S');
   }
 
-  // Outer profile
-  { const dpr=dashPdf(prof(),mm2pt); if (dpr) ops.push(dpr); }
+  // Outer profile. Dashed sections use the chosen named spot colour; solid sections stay spot 7.
+  { const dpr=dashPdf(prof(),mm2pt); if (dpr) { setDashSpot(prof().dash); ops.push(dpr); } }
   if (S.profileType === "rect" && anyEdges()) {
-    pdfEdgePieces(ops, coord, prof(), v=>ox+v*mm2pt, v=>oy+v*mm2pt, mm2pt);
+    pdfEdgePieces(ops, coord, prof(), v=>ox+v*mm2pt, v=>oy+v*mm2pt, mm2pt, true);
   } else if (S.profileType === "rect") {
     const pr = S.profileR;
     rrPath(ox, oy, S.mw*mm2pt, S.mh*mm2pt,
       pr.tl*mm2pt, pr.tr*mm2pt, pr.br*mm2pt, pr.bl*mm2pt);
   } else if (S.profileType === "path") {
+    setSpot(S.profileDash ? dashSpotOf(S.profileDash) : 7);
     pdfPath(ops, coord, prof(), ox, oy, mm2pt);
   } else {
+    setSpot(S.profileDash ? dashSpotOf(S.profileDash) : 7);
     ellPath(ox+S.mw/2*mm2pt, oy+S.mh/2*mm2pt, S.mw/2*mm2pt, S.mh/2*mm2pt);
   }
-
+  setSpot('7');
   ops.push('[] 0 d');
   // Inner shapes
   for (const r of S.placed) {
@@ -1559,9 +1572,10 @@ document.getElementById("downloadPdf").onclick = () => {
     const ry = oy + r.y*mm2pt;
     const rw = r.w*mm2pt;
     const rh = r.h*mm2pt;
-    const dpx = dashPdf(r, mm2pt); if (dpx) ops.push(dpx);
+    const dpx = dashPdf(r, mm2pt); if (dpx) { setDashSpot(r.dash); ops.push(dpx); }
 
     if (r.type === "dash") {
+      setDashSpot(r);
       const cut = (fitDash(r).cut*mm2pt).toFixed(3);
       const tie = (fitDash(r).tie*mm2pt).toFixed(3);
       ops.push(`[${cut} ${tie}] 0 d`);
@@ -1573,18 +1587,21 @@ document.getElementById("downloadPdf").onclick = () => {
         ops.push(`${coord(rx, ry+rh)} l S`);
       }
       ops.push('[] 0 d');
+      setSpot('7');
     } else if (r.type === "path") {
+      setSpot(r.dash ? dashSpotOf(r.dash) : 7);
       pdfPath(ops, coord, r, ox, oy, mm2pt);
     } else if (r.type === "rect" && anyEdges()) {
-      pdfEdgePieces(ops, coord, r, v=>ox+v*mm2pt, v=>oy+v*mm2pt, mm2pt);
+      pdfEdgePieces(ops, coord, r, v=>ox+v*mm2pt, v=>oy+v*mm2pt, mm2pt, true);
     } else if (r.type === "rect") {
       const tl=(r.r?.tl||0)*mm2pt, tr=(r.r?.tr||0)*mm2pt;
       const br=(r.r?.br||0)*mm2pt, bl=(r.r?.bl||0)*mm2pt;
       rrPath(rx, ry, rw, rh, tl, tr, br, bl);
     } else {
+      setSpot(r.dash ? dashSpotOf(r.dash) : 7);
       ellPath(rx+rw/2, ry+rh/2, rw/2, rh/2);
     }
-    if (dpx) ops.push('[] 0 d');
+    if (dpx) { ops.push('[] 0 d'); setSpot('7'); }
   }
 
   // Build PDF with byte-accurate xref
@@ -1601,19 +1618,24 @@ document.getElementById("downloadPdf").onclick = () => {
 
   const o1 = obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
   const o2 = obj(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
-  const o3 = obj(3, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pW.toFixed(3)} ${pH.toFixed(3)}] /Contents 4 0 R /Resources << /ColorSpace << /CS7 [/Separation /7 /DeviceCMYK << /FunctionType 2 /Domain [0 1] /C0 [0 0 0 0] /C1 [0 1 0 0] /N 1 >>] >> >> >>`);
+  const o3 = obj(3, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pW.toFixed(3)} ${pH.toFixed(3)}] /Contents 4 0 R /Resources << /ColorSpace << /Spot7 [/Separation /7 /DeviceCMYK 5 0 R] /Spot8 [/Separation /8 /DeviceCMYK 6 0 R] >> >> >>`);
   const o4 = obj(4, `<< /Length ${streamLen} >>`, ops.join('\n'));
+  // Spot 7 alternate is 100% magenta (CMYK 0,100,0,0).
+  const o5 = obj(5, '<< /FunctionType 2 /Domain [0 1] /Range [0 1 0 1 0 1 0 1] /C0 [0 0 0 0] /C1 [0 1 0 0] /N 1 >>');
+  // Spot 8 is a named Separation colour with a DeviceCMYK alternate.
+  // Tint 0 = paper/no ink; tint 1 = 100% cyan (C=1, M=0, Y=0, K=0).
+  const o6 = obj(6, '<< /FunctionType 2 /Domain [0 1] /Range [0 1 0 1 0 1 0 1] /C0 [0 0 0 0] /C1 [1 0 0 0] /N 1 >>');
 
   const header = '%PDF-1.4\n';
   let pos = enc.encode(header).length;
   const offsets = [0];
-  [o1,o2,o3,o4].forEach(o => { offsets.push(pos); pos += enc.encode(o).length; });
+  [o1,o2,o3,o4,o5,o6].forEach(o => { offsets.push(pos); pos += enc.encode(o).length; });
 
-  let xref = `xref\n0 5\n0000000000 65535 f \n`;
-  for (let i = 1; i <= 4; i++) xref += offsets[i].toString().padStart(10,'0') + ' 00000 n \n';
-  const trailer = `trailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n${pos}\n%%EOF`;
+  let xref = `xref\n0 7\n0000000000 65535 f \n`;
+  for (let i = 1; i <= 6; i++) xref += offsets[i].toString().padStart(10,'0') + ' 00000 n \n';
+  const trailer = `trailer\n<< /Size 7 /Root 1 0 R >>\nstartxref\n${pos}\n%%EOF`;
 
-  const pdfStr = header + o1 + o2 + o3 + o4 + xref + trailer;
+  const pdfStr = header + o1 + o2 + o3 + o4 + o5 + o6 + xref + trailer;
   const blob = new Blob([pdfStr], { type: 'application/pdf' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
