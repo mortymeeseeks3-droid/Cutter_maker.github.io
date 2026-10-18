@@ -994,7 +994,7 @@ function boolOp(op, list) {
 /* ---- dimensions of free-form closed outlines (merged / trimmed / imported): every straight side, every arc radius, every round hole ---- */
 function bArcFit(p, depth=0) {
   const q=t=>bPt(p,t), f=iCirc3(q(0.2),q(0.5),q(0.8));
-  if (f && f.r<1e5) { const tol=0.02+f.r*0.0006; if ([0.02,0.1,0.35,0.65,0.9,0.98].every(t=>Math.abs(Math.hypot(q(t)[0]-f.cx,q(t)[1]-f.cy)-f.r)<=tol)) return [{...f,mid:q(0.5)}]; }
+  if (f && f.r<1e5) { const tol=0.06+f.r*0.0015; if ([0.02,0.1,0.35,0.65,0.9,0.98].every(t=>Math.abs(Math.hypot(q(t)[0]-f.cx,q(t)[1]-f.cy)-f.r)<=tol)) return [{...f,mid:q(0.5)}]; }
   if (depth>=2) return null;
   const [l,r]=iSplit(p), A=bArcFit(l,depth+1), B=A&&bArcFit(r,depth+1); return A&&B?A.concat(B):null;
 }
@@ -1206,7 +1206,7 @@ function iCirc3(a,b,c) {
 function iArcPieces(s, depth=0) {
   const m=iBez(s,.5), f=iCirc3(s.p0,m,s.p1);
   if (f && f.r<1e5) {
-    const tol=0.02+f.r*0.0006;
+    const tol=0.06+f.r*0.0015;
     if ([.15,.3,.7,.85].every(t => { const q=iBez(s,t); return Math.abs(Math.hypot(q[0]-f.cx,q[1]-f.cy)-f.r)<=tol; })) return [{...f,mid:m}];
   }
   if (depth>=2) return null;
@@ -1261,7 +1261,10 @@ function iAsRect(segs) {
     }
   }
   const r={tl:found.tl||0,tr:found.tr||0,br:found.br||0,bl:found.bl||0};
-  if (!iAgree(P.concat(iSample(segs,40)), iRRPoly(b.x0,b.y0,b.w,b.h,r), 0.04)) return null;
+  // Do not silently turn a curved PDF outline into a square-corner rectangle.
+  // A cubic corner must be recognized as an arc, otherwise retain the exact path via iCustom().
+  if (segs.some(s=>s.t==="C") && !Object.values(r).some(v=>v>0.01)) return null;
+  if (!iAgree(P.concat(iSample(segs,40)), iRRPoly(b.x0,b.y0,b.w,b.h,r), 0.12)) return null;
   return {type:"rect",x:b.x0,y:b.y0,w:b.w,h:b.h,r};
 }
 function iAsEllipse(segs) {
@@ -1323,7 +1326,7 @@ function extractPaths(ol, OPS, mmPerUnit, rot=0) {
         else if (op===OPS.lineTo) { ensure(); const p=tp(pa[k],pa[k+1]); k+=2; sub.segs.push({t:"L",p0:sub.cur,p1:p}); sub.cur=p; }
         else if (op===OPS.curveTo) { ensure(); const c1=tp(pa[k],pa[k+1]),c2=tp(pa[k+2],pa[k+3]),p=tp(pa[k+4],pa[k+5]); k+=6; sub.segs.push({t:"C",p0:sub.cur,c1,c2,p1:p}); sub.cur=p; }
         else if (op===OPS.curveTo2) { ensure(); const c2=tp(pa[k],pa[k+1]),p=tp(pa[k+2],pa[k+3]); k+=4; sub.segs.push({t:"C",p0:sub.cur,c1:sub.cur,c2,p1:p}); sub.cur=p; }
-        else if (op===OPS.curveTo3) { ensure(); const c1=tp(pa[k],pa[k+1]),p=tp(pa[k+2],pa[k+3]); k+=4; sub.segs.push({t:"C",p0:sub.cur,c1,c2:p,p1:p}); sub.cur=p; }
+        else if (op===OPS.curveTo3) { ensure(); const c2=tp(pa[k],pa[k+1]),p=tp(pa[k+2],pa[k+3]); k+=4; sub.segs.push({t:"C",p0:sub.cur,c1:sub.cur,c2,p1:p}); sub.cur=p; }
         else if (op===OPS.closePath) closeSub();
         else if (op===OPS.rectangle) {
           const x=pa[k],y=pa[k+1],w=pa[k+2],h=pa[k+3]; k+=4;
@@ -1410,7 +1413,48 @@ function recognizeShapes(paths, pageW, pageH) {
   items.forEach((it,i)=>{ if (it.type!=="dash" && (it.type!=="path"||it.closed) && it.w*it.h>area) { area=it.w*it.h; oi=i; } });
   let outer=null;
   if (oi>=0) { outer=items[oi]; items.splice(oi,1); }
-  else { const b=iBBox(items.flatMap(i=>[[i.x,i.y],[i.x+i.w,i.y+i.h]])); outer={type:"rect",x:b.x0,y:b.y0,w:b.w,h:b.h,r:{tl:0,tr:0,br:0,bl:0},synthetic:true}; }
+  else {
+    // Some cutter PDFs stroke every edge of the outer perimeter as a separate
+    // path (one line or one corner curve per PDF paint operation), so no single
+    // closed outline exists for the normal recognizer. Rebuild the outer rounded
+    // rectangle from the overall bounds and the cubic corner arcs in those paths.
+    const b=iBBox(items.flatMap(i=>[[i.x,i.y],[i.x+i.w,i.y+i.h]]));
+    const rr={tl:0,tr:0,br:0,bl:0}, cornerDefs=[
+      ["tl",b.x0,b.y0,1,1],["tr",b.x0+b.w,b.y0,-1,1],
+      ["br",b.x0+b.w,b.y0+b.h,-1,-1],["bl",b.x0,b.y0+b.h,1,-1]
+    ];
+    const arcs=[];
+    for (const path of paths) for (const seg of path.segs||[]) if (seg.t==="C") {
+      const pcs=iArcPieces(seg);
+      if (pcs) for (const a of pcs) if (a.r>0.05 && a.r<Math.min(b.w,b.h)/8) arcs.push(a);
+    }
+    for (const [key,cx,cy,sx,sy] of cornerDefs) {
+      let best=null, score=Infinity;
+      for (const a of arcs) {
+        const ex=cx+sx*a.r, ey=cy+sy*a.r;
+        const d=Math.hypot(a.cx-ex,a.cy-ey);
+        if (d<score && d<Math.max(0.25,a.r*0.18)) { best=a; score=d; }
+      }
+      if (best) rr[key]=best.r;
+    }
+    // Drop only the individual solid perimeter strokes from the imported
+    // cavity list; preserve interior lines and dashed cut/tie lines.
+    const edgeTol=0.08;
+    items=items.filter(it=>{
+      if (it.type!=="path" || it.dash) return true;
+      const x0=it.x,y0=it.y,x1=it.x+it.w,y1=it.y+it.h;
+      const flatTop=Math.abs(y0-b.y0)<edgeTol&&Math.abs(y1-b.y0)<edgeTol;
+      const flatBottom=Math.abs(y0-(b.y0+b.h))<edgeTol&&Math.abs(y1-(b.y0+b.h))<edgeTol;
+      const flatLeft=Math.abs(x0-b.x0)<edgeTol&&Math.abs(x1-b.x0)<edgeTol;
+      const flatRight=Math.abs(x0-(b.x0+b.w))<edgeTol&&Math.abs(x1-(b.x0+b.w))<edgeTol;
+      const corner=(x0<=b.x0+edgeTol&&y0<=b.y0+edgeTol&&x1<=b.x0+Math.max(rr.tl,rr.bl)+edgeTol&&y1<=b.y0+Math.max(rr.tl,rr.tr)+edgeTol) ||
+        (x1>=b.x0+b.w-edgeTol&&y0<=b.y0+edgeTol&&x0>=b.x0+b.w-Math.max(rr.tr,rr.br)-edgeTol&&y1<=b.y0+Math.max(rr.tr,rr.tl)+edgeTol) ||
+        (x1>=b.x0+b.w-edgeTol&&y1>=b.y0+b.h-edgeTol&&x0>=b.x0+b.w-Math.max(rr.br,rr.tr)-edgeTol&&y0>=b.y0+b.h-Math.max(rr.br,rr.bl)-edgeTol) ||
+        (x0<=b.x0+edgeTol&&y1>=b.y0+b.h-edgeTol&&x1<=b.x0+Math.max(rr.bl,rr.tl)+edgeTol&&y0>=b.y0+b.h-Math.max(rr.bl,rr.br)-edgeTol);
+      return !(flatTop||flatBottom||flatLeft||flatRight||corner);
+    });
+    outer={type:"rect",x:b.x0,y:b.y0,w:b.w,h:b.h,r:rr,synthetic:true};
+  }
   const ox=outer.x, oy=outer.y;
   const fix=it=>{
     const o={type:it.type,x:iSnap(it.x-ox),y:iSnap(it.y-oy),w:iSnap(it.w),h:iSnap(it.h)};
@@ -1452,13 +1496,32 @@ async function importPdf(file) {
 }
 function applyImport(res, pn, pages) {
   pushUndo();
-  const P=res.profile, pr=P.r||{tl:0,tr:0,br:0,bl:0};
+  const P=res.profile;
+  let pr=P.r?{...P.r}:{tl:0,tr:0,br:0,bl:0};
+  // Restore the shared Corners value for profiles exported with one radius on all
+  // four corners. PDF curve extraction can miss one arc or produce tiny numeric
+  // differences, so use the consistent detected radius when the detected values
+  // clearly describe one uniform-radius profile.
+  let sharedRadius=null;
+  if (P.type==="rect") {
+    const vals=[pr.tl,pr.tr,pr.br,pr.bl].map(v=>Math.max(0,Number(v)||0));
+    const curved=vals.filter(v=>v>0.05).sort((a,b)=>a-b);
+    if (curved.length && curved[curved.length-1]-curved[0] <= Math.max(0.15,curved[curved.length-1]*0.04)) {
+      sharedRadius=curved[Math.floor(curved.length/2)];
+      // When at least one corner arc was detected and all detected arcs agree,
+      // treat missing/near-zero corner detections as missed arcs, not square corners.
+      pr={tl:sharedRadius,tr:sharedRadius,br:sharedRadius,bl:sharedRadius};
+    } else if (vals.every(v=>Math.abs(v-vals[0])<=0.05)) {
+      sharedRadius=vals[0];
+    }
+  }
   S.profileType = P.type==="path" ? "path" : P.type;
   if (P.type==="rect") S.profileR={...pr};
   if (P.type==="path") S.profilePath=P.segs;
   S.profileDash=P.dash||null; S.profileEdges=null; S.profileRadii=null; syncDashUI();
   S.mw=P.w; S.mh=P.h;
-  $("pShape").value=S.profileType; $("pW").value=P.w; $("pH").value=P.h; $("pR").value="";
+  $("pShape").value=S.profileType; $("pW").value=P.w; $("pH").value=P.h;
+  $("pR").value=(P.type==="rect" && sharedRadius!==null && sharedRadius>0.005) ? String(Math.round(sharedRadius*1000)/1000) : "";
   if (P.type==="rect") { $("pTL").value=pr.tl; $("pTR").value=pr.tr; $("pBR").value=pr.br; $("pBL").value=pr.bl; }
   S.placed = res.shapes; undoStack.length>100&&undoStack.shift();
   $("auto").checked = false;
