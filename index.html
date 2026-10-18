@@ -1523,7 +1523,7 @@ document.getElementById("downloadPdf").onclick = () => {
 
   const ops = [];
   ops.push('0.5 w');       // line width
-  ops.push('0 0 0 RG');    // stroke black
+  ops.push('/CS7 CS 1 SCN');    // stroke in the named spot colour "7" (100% magenta)
   ops.push('[] 0 d');      // solid dash (reset)
 
   const rrPath=(...a)=>pdfRR(ops,coord,...a);
@@ -1601,7 +1601,7 @@ document.getElementById("downloadPdf").onclick = () => {
 
   const o1 = obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
   const o2 = obj(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
-  const o3 = obj(3, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pW.toFixed(3)} ${pH.toFixed(3)}] /Contents 4 0 R /Resources << >> >>`);
+  const o3 = obj(3, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pW.toFixed(3)} ${pH.toFixed(3)}] /Contents 4 0 R /Resources << /ColorSpace << /CS7 [/Separation /7 /DeviceCMYK << /FunctionType 2 /Domain [0 1] /C0 [0 0 0 0] /C1 [0 1 0 0] /N 1 >>] >> >> >>`);
   const o4 = obj(4, `<< /Length ${streamLen} >>`, ops.join('\n'));
 
   const header = '%PDF-1.4\n';
