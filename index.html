@@ -607,7 +607,7 @@ function dr() {
     x.fillStyle = bad?"rgba(255,80,80,.14)":on?"rgba(0,255,255,.14)":dc+"22";
     x.lineWidth = (on?2.4:1.6)*px;
     if (s.type==="dash") {
-      const f=fitDash(s); x.strokeStyle=spotHex(s.spot||7); x.setLineDash([f.cut, f.tie]);
+      const f=fitDash(s); x.strokeStyle=spotHex(s.spot||7); x.setLineDash(s.solid?[ ]:[f.cut, f.tie]);
       x.beginPath(); x.moveTo(s.x,s.y); x.lineTo(s.x+s.w,s.y+s.h); x.stroke(); x.setLineDash([]);
     } else { const p=new Path2D(shapeD(s)); if (!(s.type==="path"&&!s.closed)) x.fill(p); if (pieceMode(s)) strokePieces(s); else { const sd=dashFit(s); if (sd) { x.strokeStyle=spotHex(s.dash.spot||7); x.setLineDash([sd.cut,sd.tie]); } x.stroke(p); x.setLineDash([]); } }
   });
@@ -803,7 +803,7 @@ function curLine() {
   if (sel<0 || !S.placed[sel]) return null;
   const s=S.placed[sel];
   if (s.type==="rect") return selEdge ? {o:s,k:selEdge,rect:true,title:`${ENAME[selEdge]} edge · shape ${sel+2}`} : null;
-  if (s.type==="dash") return null;                     // straight lines have their own compact row
+  if (s.type==="dash") return {o:s,k:null,rect:false,title:`Line · shape ${sel+2}`};
   return {o:s,k:null,rect:false,title:`${s.type==="path"?"Outline":s.type[0].toUpperCase()+s.type.slice(1)} line · shape ${sel+2}`};
 }
 function setEdge(o,k,v) {
@@ -828,7 +828,7 @@ function fillLinePanel() {
   const L=curLine(), P=$("linePanel"); P.hidden=!L; if (!L) return;
   $("lnTitle").textContent=L.title; $("lnOff").style.display=L.rect?"":"none";
   $("lnAll").textContent=L.rect?"All 4 sides":"All of this type"; $("lnAll").title=L.rect?"Give all four sides of this rectangle the same style":"Give every shape of this type the same style";
-  const q=L.rect?(L.o.edges?L.o.edges[L.k]:L.o.dash):L.o.dash;
+  const q=L.rect?(L.o.edges?L.o.edges[L.k]:L.o.dash):(L.o.type==="dash"?(L.o.solid?null:{cut:L.o.cut,tie:L.o.tie,spot:L.o.spot}):L.o.dash);
   lnMode=q?(q.off?"off":"dash"):"solid"; if (q&&q.cut) { $("lnC").value=q.cut; $("lnT").value=q.tie; } $("lnSpot").value=String(q&&q.spot||7);
   const n=L.rect?touching(L.o,L.k).length:0; $("lnLink").textContent=n?`· touches ${n} other line${n>1?"s":""} (changed together)`:"";
   paintLine();
@@ -836,6 +836,7 @@ function fillLinePanel() {
 function applyLine() {
   const L=curLine(); if (!L) return; const v=lineVal();
   if (L.rect) { setEdge(L.o,L.k,v); for (const [q,k2] of touching(L.o,L.k)) setEdge(q,k2,v?{...v}:null); }
+  else if (L.o.type==="dash") { if (v&&v.cut) { L.o.solid=false; L.o.cut=v.cut; L.o.tie=v.tie; L.o.spot=v.spot||7; } else { L.o.solid=true; L.o.cut=L.o.orient==="h"?L.o.w:L.o.h; L.o.tie=0; } }
   else L.o.dash=(v&&v.cut)?v:null;
   dr();
 }
@@ -1080,10 +1081,26 @@ $("pfX").onclick = () => select(-1);
 /* ───────── Canvas interaction: click, drag, snap ───────── */
 const toMM = e => { const r=c.getBoundingClientRect(); return [(e.clientX-r.left-S.ox)/S.scale, (e.clientY-r.top-S.oy)/S.scale]; };
 function hit(gx, gy) {
-  const tol=8/S.scale;
+  // Imported PDF strokes are often open custom paths. Their bounding boxes can
+  // be only a fraction of a millimetre high (or have reversed coordinates),
+  // making them almost impossible to select by touch. Hit-test the actual path
+  // segments with a screen-sized tolerance instead.
+  const tol= Math.max(8/S.scale, 0.25), tol2=tol*tol;
+  const nearOpenPath=(s)=>{
+    const pts0=flatAbs(s); if (!pts0 || pts0.length<2) return false;
+    for(let j=1;j<pts0.length;j++){
+      const a=pts0[j-1], b=pts0[j], dx=b[0]-a[0], dy=b[1]-a[1];
+      const den=dx*dx+dy*dy;
+      const t=den?Math.max(0,Math.min(1,((gx-a[0])*dx+(gy-a[1])*dy)/den)):0;
+      const ex=gx-(a[0]+t*dx), ey=gy-(a[1]+t*dy);
+      if(ex*ex+ey*ey<=tol2) return true;
+    }
+    return false;
+  };
   for (let i=S.placed.length-1;i>=0;i--) {
     const s=S.placed[i];
-    if (s.type==="dash"||(s.type==="path"&&!s.closed)) { if (gx>=s.x-tol&&gx<=s.x+s.w+tol&&gy>=s.y-tol&&gy<=s.y+s.h+tol) return i; }
+    if (s.type==="dash") { if (gx>=Math.min(s.x,s.x+s.w)-tol&&gx<=Math.max(s.x,s.x+s.w)+tol&&gy>=Math.min(s.y,s.y+s.h)-tol&&gy<=Math.max(s.y,s.y+s.h)+tol) return i; }
+    else if (s.type==="path"&&!s.closed) { if (nearOpenPath(s)) return i; }
     else if (inside(s,gx,gy,0)) return i;
   }
   return -1;
@@ -1151,7 +1168,7 @@ function buildSvg() {
   const da=s=>{ const d=dashFit(s); return d?` stroke-dasharray="${R(d.cut)} ${R(d.tie)}"`:""; };
   let g = pieceMode(prof()) ? svgPieces(prof()) : `<path d="${shapeD(prof())}"${da(prof())}/>`;
   for (const s of S.placed) {
-    if (s.type==="dash") { const d=fitDash(s); g += `<line x1="${R(s.x)}" y1="${R(s.y)}" x2="${R(s.x+s.w)}" y2="${R(s.y+s.h)}" stroke-dasharray="${R(d.cut)} ${R(d.tie)}"/>`; }
+    if (s.type==="dash") { const d=fitDash(s); g += `<line x1="${R(s.x)}" y1="${R(s.y)}" x2="${R(s.x+s.w)}" y2="${R(s.y+s.h)}" ${s.solid?"":"stroke-dasharray=\""+R(d.cut)+" "+R(d.tie)+"\""}/>`; }
     else g += pieceMode(s) ? svgPieces(s) : `<path d="${shapeD(s)}"${da(s)}/>`;
   }
   const B=contentBox(), ext=B.x0<0||B.y0<0||B.x1>S.mw||B.y1>S.mh, mg=ext?0.5:0, vx=R(B.x0-mg), vy=R(B.y0-mg), vw=R(B.w+2*mg), vh=R(B.h+2*mg);
@@ -2166,7 +2183,7 @@ const exportA4 = async () => {
   ops.push("0.975 0.98 0.985 rg"); shapePath(P0,"f");
   sh.forEach((s,i)=>{
     const hx=gOf[i].hex;
-    if (s.type==="dash") { const q=fitDash(s); ops.push(`${deep(hx)} RG 1.6 w 0 J ${q.tie>0?`[${f(q.cut*K)} ${f(q.tie*K)}] 0 d `:""}${Pp(gx(s.x),gy(s.y))} m ${Pp(gx(s.x+s.w),gy(s.y+s.h))} l S [] 0 d`); }
+    if (s.type==="dash") { const q=fitDash(s); ops.push(`${deep(hx)} RG 1.6 w 0 J ${!s.solid&&q.tie>0?`[${f(q.cut*K)} ${f(q.tie*K)}] 0 d `:""}${Pp(gx(s.x),gy(s.y))} m ${Pp(gx(s.x+s.w),gy(s.y+s.h))} l S [] 0 d`); }
     else { if (!(s.type==="path"&&!s.closed)) { ops.push(`q /G5 gs ${hex(hx)} rg`); shapePath(s,"f"); ops.push("Q"); } ops.push(`${deep(hx)} RG 0.9 w`); { if (pieceMode(s)) pdfEdgePieces(ops,Pp,s,gx,gy,K); else { const dp=dashPdf(s,K); if (dp) ops.push(dp); shapePath(s,"S"); if (dp) ops.push("[] 0 d"); } } }
   });
   ops.push(`${hex(BC)} RG 1.4 w`); { if (pieceMode(P0)) pdfEdgePieces(ops,Pp,P0,gx,gy,K); else { const dp=dashPdf(P0,K); if (dp) ops.push(dp); shapePath(P0,"S"); if (dp) ops.push("[] 0 d"); } }
