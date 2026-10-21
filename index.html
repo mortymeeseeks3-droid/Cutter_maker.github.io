@@ -85,7 +85,7 @@ body.pf #dimKey{display:none}
       <button id="lnAll"></button>
     </div>
     <div class="lnRow" id="lnDashRow"><label>Cut<input id="lnC" type="number" step="any" value="3"></label><label>Tie<input id="lnT" type="number" step="any" value="1"></label></div>
-    <div class="lnRow" id="lnSpotRow" hidden><label style="flex:1">Dashed line spot colour<select id="lnSpot"><option value="7">7 — 100% Magenta</option><option value="8">8 — 100% Cyan</option></select></label></div>
+    <div class="lnRow" id="lnSpotRow"><label style="flex:1">Line spot colour (solid or dashed)<select id="lnSpot"><option value="7">7 — 100% Magenta</option><option value="8">8 — 100% Cyan</option></select></label></div>
   </div>
   <div style="font-size:11px;color:#888;margin:4px 0 8px">Select a profile edge or shape line, choose Dashed, then assign spot colour 7 (magenta) or 8 (cyan) for that line.</div>
   <h3>Outer profile</h3>
@@ -396,7 +396,7 @@ function strokePieces(s) {                  // canvas; each dashed edge keeps it
   const base=x.strokeStyle;
   for (const pc of edgePieces(s,true)) {
     const off=pc.dash&&pc.dash.off, df=pieceDash(pc);
-    x.save(); if (df) x.strokeStyle=spotHex(pc.dash.spot||7); else x.strokeStyle=base;
+    x.save(); if (df) x.strokeStyle=spotHex(pc.dash.spot||7); else x.strokeStyle=spotHex((pc.dash && pc.dash.spot) || pc.solidSpot || pc.spot || 7);
     if (off) { x.globalAlpha=.3; x.setLineDash([3/S.scale,3/S.scale]); } else x.setLineDash(df?[df.cut,df.tie]:[]);
     x.stroke(new Path2D(pc.d)); x.restore();
   }
@@ -411,7 +411,9 @@ function pdfEdgePieces(ops,P,s,X,Y,k,spotDash=null) {      // PDF writers: X/Y m
   const K=0.5523;
   for (const pc of edgePieces(s,true)) {
     if (pc.dash&&pc.dash.off) continue; const df=pieceDash(pc);
-    if (spotDash) ops.push(df?`/Spot${pc.dash.spot||7} CS 1 SCN`:'/Spot7 CS 1 SCN');
+    // Preserve the selected named spot colour for BOTH dashed and solid edge pieces.
+    // Solid pieces have no dash descriptor, so fall back to the owning shape's solidSpot.
+    if (spotDash) { const spot = df ? (pc.dash?.spot || 7) : ((pc.dash && pc.dash.spot) || pc.solidSpot || s.solidSpot || s.spot || 7); ops.push(`/Spot${String(spot)==='8'?'8':'7'} CS 1 SCN`); }
     ops.push(df?`[${(df.cut*k).toFixed(3)} ${(df.tie*k).toFixed(3)}] 0 d`:"[] 0 d");
     if (pc.kind==="L") ops.push(`${P(X(pc.x0),Y(pc.y0))} m ${P(X(pc.x1),Y(pc.y1))} l S`);
     else { const a0=pc.a0,a1=pc.a1,r=pc.r, p0=[pc.cx+r*Math.cos(a0),pc.cy+r*Math.sin(a0)], p3=[pc.cx+r*Math.cos(a1),pc.cy+r*Math.sin(a1)],
@@ -600,16 +602,16 @@ function dr() {
   x.setTransform(d,0,0,d,0,0); x.clearRect(0,0,c.width,c.height);
   x.save(); x.translate(S.ox,S.oy); x.scale(S.scale,S.scale);
   const px = 1/S.scale;
-  x.lineWidth = 2*px; x.strokeStyle = dim.on?"#4da3ff":"#d6d600"; { const PP=prof(); if (pieceMode(PP)) strokePieces(PP); else { const pd=dashFit(PP); if (pd) { x.strokeStyle=spotHex(PP.dash.spot||7); x.setLineDash([pd.cut,pd.tie]); } x.stroke(new Path2D(shapeD(PP))); x.setLineDash([]); } }
+  x.lineWidth = 2*px; x.strokeStyle = spotHex(7); { const PP=prof(); if (pieceMode(PP)) strokePieces(PP); else { const pd=dashFit(PP); if (pd) { x.strokeStyle=spotHex(PP.dash.spot||7); x.setLineDash([pd.cut,pd.tie]); } x.stroke(new Path2D(shapeD(PP))); x.setLineDash([]); } }
   S.placed.forEach((s,i) => {
     const bad=issues[i], on=i===sel||selSet.has(i);
-    const dc=dim.on?DIMCOL[i%DIMCOL.length]:"#d6d600"; x.strokeStyle = bad?"#ff5555":on?"#00ffff":dc;
-    x.fillStyle = bad?"rgba(255,80,80,.14)":on?"rgba(0,255,255,.14)":dc+"22";
+    const dc=spotHex(7); x.strokeStyle = bad?"#ff5555":on?"#00ffff":dc;
+    x.fillStyle = bad?"rgba(255,80,80,.14)":on?"rgba(0,255,255,.14)":"rgba(255,0,255,.08)";
     x.lineWidth = (on?2.4:1.6)*px;
     if (s.type==="dash") {
-      const f=fitDash(s); x.strokeStyle=spotHex(s.spot||7); x.setLineDash(s.solid?[ ]:[f.cut, f.tie]);
+      const f=fitDash(s); x.strokeStyle=spotHex(s.solid?(s.solidSpot||s.spot||7):(s.spot||7)); x.setLineDash(s.solid?[ ]:[f.cut, f.tie]);
       x.beginPath(); x.moveTo(s.x,s.y); x.lineTo(s.x+s.w,s.y+s.h); x.stroke(); x.setLineDash([]);
-    } else { const p=new Path2D(shapeD(s)); if (!(s.type==="path"&&!s.closed)) x.fill(p); if (pieceMode(s)) strokePieces(s); else { const sd=dashFit(s); if (sd) { x.strokeStyle=spotHex(s.dash.spot||7); x.setLineDash([sd.cut,sd.tie]); } x.stroke(p); x.setLineDash([]); } }
+    } else { const p=new Path2D(shapeD(s)); if (!(s.type==="path"&&!s.closed)) x.fill(p); if (pieceMode(s)) strokePieces(s); else { x.strokeStyle=spotHex((s.dash && !s.dash.solid && s.dash.cut>0) ? (s.dash.spot||7) : (s.solidSpot||7)); const sd=dashFit(s); if (sd) x.setLineDash([sd.cut,sd.tie]); x.stroke(p); x.setLineDash([]); } }
   });
   const hl=(pc,col)=>{ x.save(); x.setLineDash([]); x.lineWidth=5*px; x.strokeStyle=col; x.globalAlpha=.85; x.stroke(new Path2D(pc.d)); x.restore(); };
   if (sel>=0 && selEdge && S.placed[sel] && S.placed[sel].type==="rect") { const pc=edgePieces(S.placed[sel]).find(q=>q.k===selEdge); if (pc) hl(pc,"#ffffff"); }
@@ -822,26 +824,26 @@ function touching(o,k) {                                // other rectangle sides
   const res=[]; for (const q of cand) { if (q===o) continue; for (const pc of edgePieces(geom(q))) if (pc.kind==="L" && overlapLen(mine,pc)>0.01) res.push([q,pc.k]); }
   return res;
 }
-function lineVal() { return lnMode==="dash"?{cut:Math.max(0.01,num("lnC",3)),tie:Math.max(0,num("lnT",1)),spot:String($("lnSpot").value)==="8"?8:7}:lnMode==="off"?{off:true}:null; }
-function paintLine() { document.querySelectorAll(".seg button").forEach(b=>b.classList.toggle("act",b.dataset.m===lnMode)); $("lnDashRow").style.display=lnMode==="dash"?"":"none"; $("lnSpotRow").hidden=lnMode!=="dash"; }
+function lineVal() { const spot=String($("lnSpot").value)==="8"?8:7; return lnMode==="dash"?{cut:Math.max(0.01,num("lnC",3)),tie:Math.max(0,num("lnT",1)),spot}:lnMode==="off"?{off:true,spot}: {solid:true,spot}; }
+function paintLine() { document.querySelectorAll(".seg button").forEach(b=>b.classList.toggle("act",b.dataset.m===lnMode)); $("lnDashRow").style.display=lnMode==="dash"?"":"none"; $("lnSpotRow").hidden=lnMode==="off"; }
 function fillLinePanel() {
   const L=curLine(), P=$("linePanel"); P.hidden=!L; if (!L) return;
   $("lnTitle").textContent=L.title; $("lnOff").style.display=L.rect?"":"none";
   $("lnAll").textContent=L.rect?"All 4 sides":"All of this type"; $("lnAll").title=L.rect?"Give all four sides of this rectangle the same style":"Give every shape of this type the same style";
-  const q=L.rect?(L.o.edges?L.o.edges[L.k]:L.o.dash):(L.o.type==="dash"?(L.o.solid?null:{cut:L.o.cut,tie:L.o.tie,spot:L.o.spot}):L.o.dash);
-  lnMode=q?(q.off?"off":"dash"):"solid"; if (q&&q.cut) { $("lnC").value=q.cut; $("lnT").value=q.tie; } $("lnSpot").value=String(q&&q.spot||7);
+  const q=L.rect?(L.o.edges?L.o.edges[L.k]:L.o.dash):(L.o.type==="dash"?(L.o.solid?null:{cut:L.o.cut,tie:L.o.tie,spot:L.o.spot}):(L.o.dash && L.o.dash.cut>0 ? L.o.dash : null));
+  lnMode=q?(q.off?"off":q.solid?"solid":"dash"):"solid"; if (q&&q.cut) { $("lnC").value=q.cut; $("lnT").value=q.tie; } $("lnSpot").value=String(q&&q.spot||L.o.solidSpot||7);
   const n=L.rect?touching(L.o,L.k).length:0; $("lnLink").textContent=n?`· touches ${n} other line${n>1?"s":""} (changed together)`:"";
   paintLine();
 }
 function applyLine() {
   const L=curLine(); if (!L) return; const v=lineVal();
   if (L.rect) { setEdge(L.o,L.k,v); for (const [q,k2] of touching(L.o,L.k)) setEdge(q,k2,v?{...v}:null); }
-  else if (L.o.type==="dash") { if (v&&v.cut) { L.o.solid=false; L.o.cut=v.cut; L.o.tie=v.tie; L.o.spot=v.spot||7; } else { L.o.solid=true; L.o.cut=L.o.orient==="h"?L.o.w:L.o.h; L.o.tie=0; } }
-  else L.o.dash=(v&&v.cut)?v:null;
+  else if (L.o.type==="dash") { L.o.solidSpot=v&&v.spot||7; if (v&&v.cut) { L.o.solid=false; L.o.cut=v.cut; L.o.tie=v.tie; L.o.spot=v.spot||7; } else { L.o.solid=true; L.o.cut=L.o.orient==="h"?L.o.w:L.o.h; L.o.tie=0; } }
+  else { L.o.solidSpot=v&&v.spot||7; L.o.dash=(v&&v.cut)?v:null; }
   dr();
 }
 document.querySelectorAll(".seg button").forEach(b => b.onclick = () => { pushUndo(); lnMode=b.dataset.m; paintLine(); applyLine(); });
-["lnC","lnT"].forEach(id => $(id).oninput = () => { if (lnMode==="dash") applyLine(); }); $("lnSpot").onchange=()=>{ if (lnMode==="dash") { pushUndo(); applyLine(); } };
+["lnC","lnT"].forEach(id => $(id).oninput = () => { if (lnMode==="dash") applyLine(); }); $("lnSpot").onchange=()=>{ pushUndo(); applyLine(); };
 $("lnAll").onclick = () => {
   const L=curLine(); if (!L) return; pushUndo(); const v=lineVal();
   if (L.rect) { L.o.dash=null; L.o.edges=v?{t:v,r:{...v},b:{...v},l:{...v}}:null; for (const k of ["t","r","b","l"]) for (const [q,k2] of touching(L.o,k)) setEdge(q,k2,v?{...v}:null); }
@@ -1629,8 +1631,8 @@ document.getElementById("downloadPdf").onclick = () => {
     ops.push('h S');
   }
 
-  // Outer profile. Dashed sections use the chosen named spot colour; solid sections stay spot 7.
-  { const dpr=dashPdf(prof(),mm2pt); if (dpr) { setDashSpot(prof().dash); ops.push(dpr); } }
+  // Outer profile: preserve the chosen named spot colour for solid and dashed strokes.
+  { const dpr=dashPdf(prof(),mm2pt); setSpot(dpr ? dashSpotOf(prof().dash) : (prof().solidSpot||7)); if (dpr) ops.push(dpr); }
   if (S.profileType === "rect" && anyEdges()) {
     pdfEdgePieces(ops, coord, prof(), v=>ox+v*mm2pt, v=>oy+v*mm2pt, mm2pt, true);
   } else if (S.profileType === "rect") {
@@ -1644,7 +1646,6 @@ document.getElementById("downloadPdf").onclick = () => {
     setSpot(S.profileDash ? dashSpotOf(S.profileDash) : 7);
     ellPath(ox+S.mw/2*mm2pt, oy+S.mh/2*mm2pt, S.mw/2*mm2pt, S.mh/2*mm2pt);
   }
-  setSpot('7');
   ops.push('[] 0 d');
   // Inner shapes
   for (const r of S.placed) {
@@ -1669,19 +1670,20 @@ document.getElementById("downloadPdf").onclick = () => {
       ops.push('[] 0 d');
       setSpot('7');
     } else if (r.type === "path") {
-      setSpot(r.dash ? dashSpotOf(r.dash) : 7);
+      setSpot(r.dash ? dashSpotOf(r.dash) : (r.solidSpot||7));
       pdfPath(ops, coord, r, ox, oy, mm2pt);
     } else if (r.type === "rect" && anyEdges()) {
       pdfEdgePieces(ops, coord, r, v=>ox+v*mm2pt, v=>oy+v*mm2pt, mm2pt, true);
     } else if (r.type === "rect") {
+      setSpot(r.dash ? dashSpotOf(r.dash) : (r.solidSpot||7));
       const tl=(r.r?.tl||0)*mm2pt, tr=(r.r?.tr||0)*mm2pt;
       const br=(r.r?.br||0)*mm2pt, bl=(r.r?.bl||0)*mm2pt;
       rrPath(rx, ry, rw, rh, tl, tr, br, bl);
     } else {
-      setSpot(r.dash ? dashSpotOf(r.dash) : 7);
+      setSpot(r.dash ? dashSpotOf(r.dash) : (r.solidSpot||7));
       ellPath(rx+rw/2, ry+rh/2, rw/2, rh/2);
     }
-    if (dpx) { ops.push('[] 0 d'); setSpot('7'); }
+    if (dpx) { ops.push('[] 0 d'); setSpot(r.solidSpot||7); }
   }
 
   // Build PDF with byte-accurate xref
