@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Cutter Maker v23 · Palette / spot artwork</title>
+<title>Cutter Maker v24 · Palette / spot artwork</title>
 <style>
 [hidden]{display:none!important}
 body{margin:0;background:#111;color:#eee;font-family:sans-serif;height:100vh;display:flex;flex-direction:column-reverse;overflow:hidden}
@@ -180,8 +180,10 @@ body.pf #dimKey{display:none}
   <h3>Artwork layers <span style="font-weight:normal;font-size:11px;color:#888">palettes · spot colours · each layer = one PDF layer</span></h3>
   <div id="palList"></div>
   <div class="btns"><button id="ar_pb" class="eb" type="button">Load palette (.acb / .ase)…</button><input id="ar_pf" type="file" accept=".acb,.ase" multiple hidden></div>
+  <div class="btns"><button id="ar_fb" class="eb" type="button">Load font folder…</button><button id="ar_fi" class="eb" type="button">Load font files…</button><input id="ar_ff" type="file" webkitdirectory multiple hidden><input id="ar_fl" type="file" accept=".ttf,.otf" multiple hidden></div>
+  <div id="fontMsg" style="font-size:11px;color:#888;margin-bottom:6px">No fonts loaded — built-in Sans / Serif / Mono only.</div>
   <div id="artList"></div>
-  <div class="btns"><button id="aRect" class="eb">+ Rectangle</button><button id="aText" class="eb">+ Text</button><button id="aEye" class="eb">+ Eyemark</button><button id="aBg" class="eb">+ Background</button></div>
+  <div class="btns"><button id="aRect" class="eb">+ Rectangle</button><button id="aText" class="eb">+ Text</button><button id="aEye" class="eb">+ Eyemark</button><button id="aBg" class="eb">+ Background</button><button id="aLogo" class="eb">+ Logo / image…</button><input id="ar_lf" type="file" accept="image/*" hidden></div>
   <div id="artP" hidden>
     <div class="g">
       <label class="c4 kT">Text<input id="ar_t" type="text"></label>
@@ -190,14 +192,18 @@ body.pf #dimKey{display:none}
       <label class="s2 kT">Font<select id="ar_f"><option value="sans">Sans-serif</option><option value="serif">Serif</option><option value="mono">Monospace</option></select></label>
       <label class="s2 kT">Style<select id="ar_st"><option value="normal">Normal</option><option value="bold">Bold</option><option value="italic">Italic</option><option value="bold-italic">Bold italic</option></select></label>
       <label class="kT">Size pt<input id="ar_sz" type="number" step="any" min="1"></label>
-      <label class="kT">Rotate °<input id="ar_rot" type="number" step="any"></label>
-      <label class="s2 kT">Mirror<select id="ar_mir"><option value="">Off</option><option value="h">Horizontal (flip left↔right)</option><option value="v">Vertical (flip up↔down)</option></select></label>
+      <label class="kX">Rotate °<input id="ar_rot" type="number" step="any"></label>
+      <label class="s2 kX">Mirror<select id="ar_mir"><option value="">Off</option><option value="h">Horizontal (flip left↔right)</option><option value="v">Vertical (flip up↔down)</option></select></label>
       <label>Density %<input id="ar_d" type="number" min="1" max="100" step="any"></label>
       <label class="kP">X mm<input id="ar_x" type="number" step="any"></label>
       <label class="kP">Y mm<input id="ar_y" type="number" step="any"></label>
       <label class="kB">Width<input id="ar_w" type="number" step="any" min="0.1"></label>
       <label class="kB">Height<input id="ar_h" type="number" step="any" min="0.1"></label>
       <label class="kR">Corner R<input id="ar_r" type="number" step="any" min="0"></label>
+      <label class="c4 kL">Print logo as<select id="ar_lm"><option value="spot">Spot colour — darkness becomes a tint of the chosen colour</option><option value="full">Full colour (RGB image)</option></select></label>
+      <label class="c4 kL ck"><input type="checkbox" id="ar_li">Invert (light logo on dark background)</label>
+      <label class="c4 kL ck"><input type="checkbox" id="ar_la" checked>Lock aspect ratio</label>
+      <label class="c4 ck"><input type="checkbox" id="ar_op">Overprint this layer</label>
     </div>
     <div class="btns kP">
       <button data-aa="L" title="Left edge">⇤</button><button data-aa="CH" title="Centre horizontally">↔</button><button data-aa="R" title="Right edge">⇥</button>
@@ -209,6 +215,8 @@ body.pf #dimKey{display:none}
       <div class="g"><label class="s2">Spot name<input id="ar_sn" type="text" autocomplete="off"></label><label>Screen<input id="ar_sh" type="color" value="#ff6600"></label><label>&nbsp;<button id="ar_sa" type="button">Add</button></label></div>
     </details>
   </div>
+  <div class="btns"><button id="opOn" class="eb" type="button">Overprint ALL on</button><button id="opOff" class="eb" type="button">Overprint ALL off</button></div>
+  <label class="ck" style="margin:4px 0"><input type="checkbox" id="ar_cop">Cutter lines overprint</label>
   <label class="ck" style="margin:4px 0"><input type="checkbox" id="ar_cut" checked>Include cutter lines (spot 7/8) in the multilayer PDF</label>
   <div id="hint" style="margin-top:2px">Select an artwork layer to drag it on the canvas (snaps to edges/centre, Alt = free, arrows nudge, Esc deselects). Export ▸ “PDF — multilayer spot artwork + cutter”.</div>
   <div id="hint">Pathfinder: shift-click two or more shapes, then choose <b>Merge</b> (unite) or <b>Trim</b> (cut front shapes out of the back one). Import PDF reads the real vector outlines (outer profile, rectangles with exact corner radii, circles, ovals, dashed lines) — or drop a PDF onto the canvas. Auto layout is on by default: Add packs new shapes against the edges and each other, and profile changes re-pack. Moving a shape by hand turns it off (re-tick it, or press Pack, to re-pack). Drag shapes to move (snaps to edges, centers &amp; other shapes; hold Alt for free move). Arrows nudge 0.1mm (Shift 1mm, Alt 0.01mm). Del removes, Ctrl+D duplicates, Ctrl+Z undoes.</div>
@@ -1730,7 +1738,7 @@ const cutterPdf = (multi) => {
     if (dpx) { ops.push('[] 0 d'); setSpot(r.solidSpot||7); }
   }
 
-  if (multi) { artPdf(ops, pW, pH, ox, oy, mm2pt); return; }
+  if (multi) { artPdf(ops, pW, pH, ox, oy, mm2pt).catch(e => alert('PDF export failed: ' + e.message)); return; }
   // Build PDF with byte-accurate xref
   const enc = new TextEncoder();
   const streamBytes = enc.encode(ops.join('\n'));
@@ -2359,7 +2367,8 @@ const CF = {sans:"Arial, Helvetica, sans-serif", serif:'"Times New Roman", Times
 const PT = 25.4/72, AR = id => $("ar_"+id), mctx = document.createElement("canvas").getContext("2d");
 const esc = s => String(s).replace(/[&<>"]/g, m => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[m]));
 const opt = (n,h,l,cm) => `<option value="${esc(n)}|${h}${cm?"|"+cm:""}">${esc(l||n)}</option>`;
-let artSel = -1, artDrag = null;
+let artSel = -1, artDrag = null, imgN = 0, famN = 0; const IMGS = {}, FL = {}, LC = {};
+mctx.fontKerning = "none";
 
 function colHtml(q) {
   const ok = n => !q || n.toLowerCase().includes(q), g = (t,a) => a ? `<optgroup label="${t}">${a}</optgroup>` : "";
@@ -2378,7 +2387,10 @@ function altCmyk(n, h, cm) {      // CMYK alternate for the Separation (tint 0 =
   if (k >= .999999) return [0,0,0,1];
   return [(1-r-k)/(1-k),(1-g-k)/(1-k),(1-b-k)/(1-k),k].map(v => +Math.max(0,Math.min(1,v)).toFixed(4));
 }
-const fontStr = (L, size) => `${/italic/.test(L.st)?"italic ":""}${/bold/.test(L.st)?"bold ":""}${size}px ${CF[L.f]}`;
+const isUF = L => String(L.f||"").startsWith("u:");
+const famOf = L => isUF(L) ? (FL[L.f] && FL[L.f].fam ? `"${FL[L.f].fam}", ${CF.sans}` : CF.sans) : CF[L.f];
+const fontStr = (L, size) => `${isUF(L) ? "" : (/italic/.test(L.st)?"italic ":"") + (/bold/.test(L.st)?"bold ":"")}${size}px ${famOf(L)}`;
+const rotKind = L => L.k === "text" || L.k === "logo";
 function artBox(L) {
   if (L.k === "text") { mctx.font = fontStr(L, L.sz); return {x:L.x, y:L.y, w:mctx.measureText(L.t||" ").width*PT, h:L.sz*PT}; }
   if (L.k === "bg") { const B = contentBox(), m = 1.5; return {x:B.x0-m, y:B.y0-m, w:B.w+2*m, h:B.h+2*m}; }
@@ -2386,20 +2398,32 @@ function artBox(L) {
 }
 const txf = (L,b) => { x.translate(b.x+b.w/2, b.y+b.h/2); x.rotate((L.rot||0)*Math.PI/180); x.scale(L.mir==="h"?-1:1, L.mir==="v"?-1:1); };
 function artAABB(L) {   // axis-aligned bounds of the (rotated) layer, for hit-test / snap / align
-  const b = artBox(L); if (L.k !== "text" || !L.rot) return b;
+  const b = artBox(L); if (!rotKind(L) || !L.rot) return b;
   const r = L.rot*Math.PI/180, c = Math.abs(Math.cos(r)), s = Math.abs(Math.sin(r)), w = b.w*c+b.h*s, h = b.w*s+b.h*c;
   return {x:b.x+b.w/2-w/2, y:b.y+b.h/2-h/2, w, h};
 }
+const tintOf = (D,i,inv) => { const lum = (.299*D[i]+.587*D[i+1]+.114*D[i+2])/255; return (inv ? lum : 1-lum) * D[i+3]/255; };
+function logoCv(L) {   // spot mode: tint mask in the chosen colour; full mode: the image itself
+  const I = IMGS[L.img]; if (!I) return null; if (L.lm === "full") return I.cv;
+  const hex = L.col.split("|")[1], key = L.img + hex + !!L.inv; if (LC[key]) return LC[key];
+  const cv = document.createElement("canvas"); cv.width = I.w; cv.height = I.h;
+  const D = I.cv.getContext("2d").getImageData(0,0,I.w,I.h).data, o = cv.getContext("2d").createImageData(I.w,I.h), r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), bl = parseInt(hex.slice(5,7),16);
+  for (let i = 0; i < D.length; i += 4) { o.data[i] = r; o.data[i+1] = g; o.data[i+2] = bl; o.data[i+3] = Math.round(tintOf(D,i,L.inv)*255); }
+  cv.getContext("2d").putImageData(o,0,0); return LC[key] = cv;
+}
 function drawArt(px) {
+  if (S.art.some(L => L.op && L.on !== false)) { const B = artBox({k:"bg"}); x.fillStyle = "#fff"; x.fillRect(B.x,B.y,B.w,B.h); }   // paper, so overprint (multiply) previews correctly
   S.art.forEach((L,i) => {
     if (L.on === false) return;
     const b = artBox(L), h = L.col.split("|")[1];
-    x.save(); x.globalAlpha = Math.max(.03, (L.d||100)/100); x.fillStyle = L.k === "eye" ? "#000" : h;
+    x.save(); x.globalAlpha = Math.max(.03, (L.d||100)/100); x.fillStyle = L.k === "eye" ? "#000" : h; x.fontKerning = "none";
+    if (L.op) x.globalCompositeOperation = "multiply";
     if (L.k === "text") { txf(L,b); x.font = fontStr(L, L.sz*PT); x.textBaseline = "alphabetic"; x.fillText(L.t||" ", -b.w/2, b.h*.3); }
+    else if (L.k === "logo") { const cv = logoCv(L); if (cv) { txf(L,b); x.drawImage(cv, -b.w/2, -b.h/2, b.w, b.h); } }
     else if (L.k === "rect" && L.r > 0) x.fill(new Path2D(rectD(b.x,b.y,b.w,b.h,{tl:L.r,tr:L.r,br:L.r,bl:L.r})));
     else x.fillRect(b.x, b.y, b.w, b.h);
     x.restore();
-    if (L.k === "eye" || i === artSel) { x.save(); x.lineWidth = (i===artSel?1.5:1)*px; x.strokeStyle = i===artSel ? "#fff" : "#aaa"; x.setLineDash([5*px,4*px]); const t = L.k === "text"; if (t) txf(L,b); x.strokeRect(t?-b.w/2:b.x, t?-b.h/2:b.y, b.w, b.h); x.restore(); }
+    if (L.k === "eye" || i === artSel) { x.save(); x.lineWidth = (i===artSel?1.5:1)*px; x.strokeStyle = i===artSel ? "#fff" : "#aaa"; x.setLineDash([5*px,4*px]); const t = rotKind(L); if (t) txf(L,b); x.strokeRect(t?-b.w/2:b.x, t?-b.h/2:b.y, b.w, b.h); x.restore(); }
   });
 }
 
@@ -2468,7 +2492,7 @@ $("ar_pf").onchange = async e => {
 $("palList").addEventListener("click", e => { const b = e.target.closest("[data-pd]"); if (!b) return; PALS.splice(+b.dataset.pd,1); palSave(); palList(); });
 
 /* ── layer list + editor ── */
-const artName = L => ({rect:"Rectangle",text:"Text",eye:"Eyemark",bg:"Background"})[L.k] + " · " + (L.k==="text" ? L.t : L.col.split("|")[0]);
+const artName = L => ({rect:"Rectangle",text:"Text",eye:"Eyemark",bg:"Background",logo:"Logo"})[L.k] + " · " + (L.k==="text" ? L.t : L.k==="logo" ? L.n : L.col.split("|")[0]) + (L.op ? " · OP" : "");
 function artList() {
   $("artList").innerHTML = S.art.map((L,i) => `<div class="aRow${i===artSel?" act":""}" data-i="${i}"><input type="checkbox" class="aOn" ${L.on===false?"":"checked"} title="Show / include in PDF"><i style="background:${L.k==="eye"?"#000":L.col.split("|")[1]}"></i><span>${esc(artName(L))}</span></div>`).join("")
     || '<div style="font-size:11px;color:#777">No artwork layers yet — add one below.</div>';
@@ -2477,22 +2501,31 @@ function artXY() { const L = S.art[artSel]; if (!L || L.k === "bg") return; for 
 function artEditor() {
   const L = S.art[artSel]; $("artP").hidden = !L; if (!L) return;
   const show = (s,on) => document.querySelectorAll(s).forEach(e => e.style.display = on ? "" : "none");
-  show(".kT", L.k==="text"); show(".kC", L.k!=="eye"); show(".kE", L.k==="eye"); show(".kB", L.k==="rect"||L.k==="eye"); show(".kR", L.k==="rect"); show(".kP", L.k!=="bg");
+  show(".kT", L.k==="text"); show(".kX", rotKind(L)); show(".kL", L.k==="logo"); show(".kC", L.k!=="eye" && !(L.k==="logo" && L.lm==="full")); show(".kE", L.k==="eye"); show(".kB", /^(rect|eye|logo)$/.test(L.k)); show(".kR", L.k==="rect"); show(".kP", L.k!=="bg");
   if (L.k === "eye") AR("e").value = L.col.split("|")[0]; else colFill(L.col);
   AR("d").value = L.d||100;
-  if (L.k === "text") { AR("t").value = L.t; AR("f").value = L.f; AR("st").value = L.st; AR("sz").value = L.sz; AR("rot").value = L.rot||0; AR("mir").value = L.mir||""; }
+  if (L.k === "text") { AR("t").value = L.t; fontSel(L.f); AR("st").value = L.st; AR("sz").value = L.sz; AR("st").parentNode.style.display = isUF(L) ? "none" : ""; ensureFont(L.f).then(() => dr()); }
+  if (rotKind(L)) { AR("rot").value = L.rot||0; AR("mir").value = L.mir||""; }
+  if (L.k === "logo") { AR("lm").value = L.lm; AR("li").checked = !!L.inv; AR("la").checked = L.la !== false; }
+  AR("op").checked = !!L.op;
   if (L.k !== "bg") { AR("x").value = R(L.x); AR("y").value = R(L.y); }
-  if (L.k === "rect" || L.k === "eye") { AR("w").value = R(L.w); AR("h").value = R(L.h); }
+  if (/^(rect|eye|logo)$/.test(L.k)) { AR("w").value = R(L.w); AR("h").value = R(L.h); }
   if (L.k === "rect") AR("r").value = L.r||0;
 }
 const artUI = () => { artList(); artEditor(); };
 function artSelect(i) { artSel = i; select(-1); artUI(); dr(); }
-function artAdd(k) {
+function fontSel(cur) {
+  const s = AR("f"), fl = Object.values(FL).sort((p,q) => p.label.localeCompare(q.label));
+  s.innerHTML = '<option value="sans">Sans-serif</option><option value="serif">Serif</option><option value="mono">Monospace</option>' + (fl.length ? `<optgroup label="Loaded fonts (${fl.length})">${fl.map(f => `<option value="${esc(f.id)}">${esc(f.label)}</option>`).join("")}</optgroup>` : "");
+  s.value = cur; if (s.value !== cur) { s.insertAdjacentHTML("beforeend", `<option value="${esc(cur)}">${esc(cur.slice(2))} (not loaded)</option>`); s.value = cur; }
+}
+function artAdd(k, ex) {
   pushUndo();
   const L = {k, on:true, d:100, col: k==="eye" ? "EYEMARK|#000000" : k==="bg" ? "WHITE|#FFFFFF" : "BLACK|#000000"};
   if (k === "rect") Object.assign(L, {w:Math.min(50,S.mw*.5), h:Math.min(30,S.mh*.5), r:0});
   if (k === "eye") Object.assign(L, {w:10, h:5});
   if (k === "text") Object.assign(L, {t:"TEXT", f:"sans", st:"normal", sz:36, rot:0, mir:""});
+  if (k === "logo") { const I = IMGS[ex.img], q = I.w/I.h, w = Math.min(S.mw*.5, S.mh*.5*q); Object.assign(L, {img:ex.img, n:ex.n, w, h:w/q, rot:0, mir:"", lm:"spot", inv:false, la:true, col:"BLACK|#000000"}); }
   if (k !== "bg") { const b = artBox(L); L.x = R((S.mw-b.w)/2); L.y = R((S.mh-b.h)/2); }
   if (k === "bg") S.art.unshift(L); else S.art.push(L);
   artSel = S.art.indexOf(L); select(-1); artUI(); dr();
@@ -2509,10 +2542,16 @@ $("artP").addEventListener("input", e => {
   if (e.target.id === "ar_q") { colFill(L.col); return; }
   if (L.k === "eye") L.col = AR("e").value + "|#000000"; else if (AR("c").value) L.col = AR("c").value;
   L.d = Math.max(1, Math.min(100, nv("d",100)));
-  if (L.k === "text") { L.t = AR("t").value; L.f = AR("f").value; L.st = AR("st").value; L.sz = Math.max(1, nv("sz",24)); L.rot = nv("rot",0); L.mir = AR("mir").value; }
+  if (L.k === "text") { L.t = AR("t").value; L.f = AR("f").value; L.st = AR("st").value; L.sz = Math.max(1, nv("sz",24)); AR("st").parentNode.style.display = isUF(L) ? "none" : ""; ensureFont(L.f).then(() => dr()); }
+  if (rotKind(L)) { L.rot = nv("rot",0); L.mir = AR("mir").value; }
+  if (L.k === "logo") { L.lm = AR("lm").value; L.inv = AR("li").checked; L.la = AR("la").checked; }
+  L.op = AR("op").checked;
   if (L.k !== "bg") { L.x = nv("x",L.x); L.y = nv("y",L.y); }
-  if (L.k === "rect" || L.k === "eye") { L.w = Math.max(.1, nv("w",L.w)); L.h = Math.max(.1, nv("h",L.h)); }
+  if (/^(rect|eye|logo)$/.test(L.k)) { L.w = Math.max(.1, nv("w",L.w)); L.h = Math.max(.1, nv("h",L.h));
+    if (L.k === "logo" && L.la !== false && IMGS[L.img]) { const q = IMGS[L.img].w/IMGS[L.img].h;
+      if (e.target.id === "ar_w") { L.h = L.w/q; AR("h").value = R(L.h); } else if (e.target.id === "ar_h") { L.w = L.h*q; AR("w").value = R(L.w); } } }
   if (L.k === "rect") L.r = Math.max(0, nv("r",0));
+  if (e.target.id === "ar_lm") artEditor();
   artList(); dr();
 });
 $("artP").addEventListener("click", e => {
@@ -2521,7 +2560,7 @@ $("artP").addEventListener("click", e => {
   if (a === "del") { S.art.splice(artSel,1); artSel = -1; }
   else if (a === "dup") { const C = JSON.parse(JSON.stringify(L)); if (C.k !== "bg") { C.x = R(C.x+3); C.y = R(C.y+3); } S.art.splice(artSel+1,0,C); artSel++; }
   else if (a === "up" || a === "dn") { const j = artSel + (a==="up"?1:-1); if (j >= 0 && j < S.art.length) { [S.art[artSel],S.art[j]] = [S.art[j],S.art[artSel]]; artSel = j; } }
-  else if (a === "fill") { if (L.k==="rect"||L.k==="eye") Object.assign(L, {x:0, y:0, w:S.mw, h:S.mh}); }
+  else if (a === "fill") { if (/^(rect|eye|logo)$/.test(L.k)) Object.assign(L, {x:0, y:0, w:S.mw, h:S.mh}); }
   else if (L.k !== "bg") {
     if (a==="L") L.x = R(-ox); if (a==="R") L.x = R(S.mw-bx.w-ox); if (a==="CH") L.x = R((S.mw-bx.w)/2-ox);
     if (a==="T") L.y = R(-oy); if (a==="B") L.y = R(S.mh-bx.h-oy); if (a==="CV") L.y = R((S.mh-bx.h)/2-oy);
@@ -2558,47 +2597,152 @@ addEventListener("keydown", e => {
     if (k==="ArrowLeft") L.x = R(L.x-st); if (k==="ArrowRight") L.x = R(L.x+st); if (k==="ArrowUp") L.y = R(L.y-st); if (k==="ArrowDown") L.y = R(L.y+st); artXY(); dr(); }
 });
 
+/* ── fonts: load a folder / files of .ttf .otf, use on canvas (FontFace) and embed in the PDF ── */
+function cmapFn(v, T) {
+  const base = T.cmap.o, nt = v.getUint16(base+2); let best = null;
+  for (let i = 0; i < nt; i++) {
+    const pl = v.getUint16(base+4+i*8), en = v.getUint16(base+6+i*8), off = base + v.getUint32(base+8+i*8), fm = v.getUint16(off);
+    const s = (pl===3 && en===10 && fm===12) ? 4 : (pl===0 && fm===12) ? 3 : (pl===3 && en===1 && fm===4) ? 2 : (pl===0 && fm===4) ? 1 : 0;
+    if (s && (!best || s > best.s)) best = {s, off, fm};
+  }
+  if (!best) throw new Error("no usable cmap");
+  const off = best.off;
+  if (best.fm === 12) { const ng = v.getUint32(off+12); return cp => { let lo = 0, hi = ng-1; while (lo <= hi) { const m = (lo+hi)>>1, g = off+16+m*12, s = v.getUint32(g), e = v.getUint32(g+4); if (cp < s) hi = m-1; else if (cp > e) lo = m+1; else return v.getUint32(g+8)+cp-s; } return 0; }; }
+  const sc = v.getUint16(off+6)/2, ec = off+14, st = ec+sc*2+2, dl = st+sc*2, ro = dl+sc*2;
+  return cp => { if (cp > 0xFFFF) return 0; for (let i = 0; i < sc; i++) if (cp <= v.getUint16(ec+i*2)) { const s = v.getUint16(st+i*2); if (cp < s) return 0; const r = v.getUint16(ro+i*2), d = v.getInt16(dl+i*2); if (!r) return (cp+d) & 0xFFFF; const gi = v.getUint16(ro+i*2+r+(cp-s)*2); return gi ? (gi+d) & 0xFFFF : 0; } return 0; };
+}
+function parseFont(buf) {
+  const v = new DataView(buf), tag = v.getUint32(0); if (tag === 0x74746366) throw new Error("TTC collection");
+  const nt = v.getUint16(4), T = {};
+  for (let i = 0; i < nt; i++) { const o = 12+i*16; T[String.fromCharCode(v.getUint8(o),v.getUint8(o+1),v.getUint8(o+2),v.getUint8(o+3))] = {o:v.getUint32(o+8)}; }
+  for (const t of ["head","hhea","hmtx","cmap","name"]) if (!T[t]) throw new Error("missing "+t);
+  const nm = id => { const b = T.name.o, cnt = v.getUint16(b+2), so = b+v.getUint16(b+4);
+    for (let i = 0; i < cnt; i++) { const r = b+6+i*12, pl = v.getUint16(r); if (v.getUint16(r+6) !== id) continue; const l = v.getUint16(r+8), o = so+v.getUint16(r+10); let s = "";
+      if (pl === 3 || pl === 0) for (let k = 0; k+1 < l; k += 2) s += String.fromCharCode(v.getUint16(o+k)); else for (let k = 0; k < l; k++) s += String.fromCharCode(v.getUint8(o+k));
+      if (s) return s; } return ""; };
+  const nh = v.getUint16(T.hhea.o+34);
+  return {label:clean(nm(4)||nm(1)), ps:(nm(6)||nm(4)||"Font").replace(/[^A-Za-z0-9-]/g,"") || "Font", upm:v.getUint16(T.head.o+18), bbox:[36,38,40,42].map(d => v.getInt16(T.head.o+d)),
+    asc:v.getInt16(T.hhea.o+4), desc:v.getInt16(T.hhea.o+6), cff:tag === 0x4F54544F, gid:cmapFn(v,T), adv:g => v.getUint16(T.hmtx.o + Math.min(g,nh-1)*4)};
+}
+async function ensureFont(id) {
+  const e = FL[id]; if (!e) return null; if (e.info) return e.info;
+  if (!e.p) e.p = (async () => { const buf = await e.file.arrayBuffer(), I = parseFont(buf); I.buf = buf; e.fam = "uf" + (++famN); const ff = new FontFace(e.fam, buf); await ff.load(); document.fonts.add(ff); return e.info = I; })().catch(() => null);
+  return e.p;
+}
+async function fontScan(files) {
+  const list = [...files].filter(f => /\.(ttf|otf)$/i.test(f.name)); let bad = 0;
+  for (const [i,f] of list.entries()) {
+    if (i % 20 === 0) { $("fontMsg").textContent = `Scanning fonts ${i+1}/${list.length}…`; await new Promise(r => setTimeout(r)); }
+    try { const I = parseFont(await f.arrayBuffer()), label = I.label || f.name.replace(/\.[^.]+$/,""); FL["u:"+label] = {id:"u:"+label, label, file:f}; } catch (e) { bad++; }
+  }
+  const n = Object.keys(FL).length;
+  $("fontMsg").textContent = n ? `${n} fonts available this session${bad ? ` (${bad} skipped: .ttc / unsupported)` : ""}. Pick one in the Font list of a text layer.` : "No usable .ttf / .otf fonts found.";
+  const L = S.art[artSel]; if (L && L.k === "text") fontSel(L.f);
+}
+$("ar_fb").onclick = () => $("ar_ff").click(); $("ar_fi").onclick = () => $("ar_fl").click();
+$("ar_ff").onchange = $("ar_fl").onchange = async e => { const fs = [...e.target.files]; e.target.value = ""; await fontScan(fs); };
+
+/* ── logo / image import (raster stored once in IMGS, layers reference it by id) ── */
+async function imgLoad(f) {
+  const url = URL.createObjectURL(f);
+  try {
+    const im = new Image(); im.src = url; await im.decode();
+    const w = im.naturalWidth || 1000, h = im.naturalHeight || 1000, m = Math.max(w,h), sc = f.type === "image/svg+xml" ? 2000/m : Math.min(1, 3000/m);
+    const cv = document.createElement("canvas"); cv.width = Math.max(1,Math.round(w*sc)); cv.height = Math.max(1,Math.round(h*sc));
+    cv.getContext("2d").drawImage(im, 0, 0, cv.width, cv.height);
+    const id = "i" + Date.now().toString(36) + (imgN++); IMGS[id] = {w:cv.width, h:cv.height, cv}; return id;
+  } finally { URL.revokeObjectURL(url); }
+}
+$("aLogo").onclick = () => $("ar_lf").click();
+$("ar_lf").onchange = async e => { const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+  try { artAdd("logo", {img: await imgLoad(f), n: f.name.replace(/\.[^.]+$/,"")}); } catch (err) { alert("Could not read that image: " + err.message); } };
+
+/* ── overprint: per layer, all layers, cutter lines ── */
+$("opOn").onclick = () => { pushUndo(); S.art.forEach(L => L.op = true); $("ar_cop").checked = true; artUI(); dr(); };
+$("opOff").onclick = () => { pushUndo(); S.art.forEach(L => L.op = false); $("ar_cop").checked = false; artUI(); dr(); };
+
 /* ── multilayer spot-colour PDF: every layer is its own OCG, every colour a named Separation ── */
-function artPdf(cutOps, pW, pH, ox, oy, k) {
+async function deflate(u8) {
+  if (!window.CompressionStream) return null;
+  const c = new CompressionStream("deflate"), w = c.writable.getWriter(); w.write(u8); w.close();
+  return new Uint8Array(await new Response(c.readable).arrayBuffer());
+}
+const enc0 = new TextEncoder();
+async function artPdf(cutOps, pW, pH, ox, oy, k) {
   const O = [null,null,null,null]; let n = 4; const add = s => { O.push(s); return ++n; };
-  const f = v => (+v).toFixed(3), pe = s => String(s).replace(/[^\x20-\x7E]/g,"?").replace(/[\\()]/g,"\\$&");
+  const stm = async (dict, u8) => { const z = await deflate(u8), b = z || u8; return add({h:`<< ${dict} ${z ? "/Filter /FlateDecode " : ""}/Length ${b.length} >>\nstream\n`, b}); };
+  const f = v => (+v).toFixed(3), g6 = v => (+v).toFixed(6), pe = s => String(s).replace(/[^\x20-\x7E]/g,"?").replace(/[\\()]/g,"\\$&");
   const nm = s => "/" + String(s).replace(/[^A-Za-z0-9_.-]/g, m => "#" + m.charCodeAt(0).toString(16).padStart(2,"0"));
   const fn = alt => add(`<< /FunctionType 2 /Domain [0 1] /Range [0 1 0 1 0 1 0 1] /C0 [0 0 0 0] /C1 [${alt.join(" ")}] /N 1 >>`);
-  const cs = {}, csD = [], ocg = [], props = [], fonts = {}, fontD = []; let body = "";
+  const cs = {}, csD = [], ocg = [], props = [], fonts = {}, fontD = [], xo = [], used = {}, ufRes = {}; let body = "";
   const spot = (name,alt) => { if (!cs[name]) { cs[name] = "CS"+csD.length; csD.push(`/${cs[name]} [/Separation ${nm(name)} /DeviceCMYK ${fn(alt)} 0 R]`); } return cs[name]; };
-  const layer = (label, content) => { const o = add(`<< /Type /OCG /Name (${pe(label)}) >>`); ocg.push(o+" 0 R"); const mc = "MC"+props.length; props.push(`/${mc} ${o} 0 R`); body += `/OC /${mc} BDC\nq\n${content}\nQ\nEMC\n`; };
+  const layer = (label, content, op) => { const o = add(`<< /Type /OCG /Name (${pe(label)}) >>`); ocg.push(o+" 0 R"); const mc = "MC"+props.length; props.push(`/${mc} ${o} 0 R`); body += `/OC /${mc} BDC\nq\n/${op ? "GSov" : "GSno"} gs\n${content}\nQ\nEMC\n`; };
   const rr = (X,Y,W,H,r) => { const q = r*.5523, v = a => f(a);
     return `${v(X+r)} ${v(Y)} m ${v(X+W-r)} ${v(Y)} l ${v(X+W-r+q)} ${v(Y)} ${v(X+W)} ${v(Y+r-q)} ${v(X+W)} ${v(Y+r)} c ${v(X+W)} ${v(Y+H-r)} l ${v(X+W)} ${v(Y+H-r+q)} ${v(X+W-r+q)} ${v(Y+H)} ${v(X+W-r)} ${v(Y+H)} c ${v(X+r)} ${v(Y+H)} l ${v(X+r-q)} ${v(Y+H)} ${v(X)} ${v(Y+H-r+q)} ${v(X)} ${v(Y+H-r)} c ${v(X)} ${v(Y+r)} l ${v(X)} ${v(Y+r-q)} ${v(X+r-q)} ${v(Y)} ${v(X+r)} ${v(Y)} c h f`; };
+  // fonts: gather the glyphs each loaded font needs, then embed each font once
+  for (const L of S.art) if (L.k === "text" && L.on !== false && isUF(L)) { const F = await ensureFont(L.f); if (F) { const u = used[L.f] = used[L.f] || new Map(); for (const ch of (L.t||" ")) u.set(F.gid(ch.codePointAt(0)), ch.codePointAt(0)); } }
+  const ufont = async id => {
+    if (ufRes[id]) return ufRes[id]; const F = FL[id].info, u8 = new Uint8Array(F.buf), sc = 1000/F.upm;
+    const ff = await stm(F.cff ? "/Subtype /OpenType" : `/Length1 ${u8.length}`, u8);
+    const d = add(`<< /Type /FontDescriptor /FontName /${F.ps} /Flags 4 /FontBBox [${F.bbox.map(v => Math.round(v*sc)).join(" ")}] /ItalicAngle 0 /Ascent ${Math.round(F.asc*sc)} /Descent ${Math.round(F.desc*sc)} /CapHeight ${Math.round(F.asc*sc)} /StemV 80 /${F.cff ? "FontFile3" : "FontFile2"} ${ff} 0 R >>`);
+    const W = [...used[id].keys()].sort((p,q) => p-q).map(gd => `${gd} [${Math.round(F.adv(gd)*sc)}]`).join(" ");
+    const cf = add(`<< /Type /Font /Subtype /${F.cff ? "CIDFontType0" : "CIDFontType2"} /BaseFont /${F.ps} /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> /FontDescriptor ${d} 0 R /DW 1000 /W [${W}]${F.cff ? "" : " /CIDToGIDMap /Identity"} >>`);
+    const hx4 = v => v.toString(16).padStart(4,"0"), u16 = cp => cp > 0xFFFF ? hx4(0xD800+((cp-0x10000)>>10)) + hx4(0xDC00+((cp-0x10000)&0x3FF)) : hx4(cp), ents = [...used[id].entries()].filter(e => e[0]);
+    let bf = ""; for (let i = 0; i < ents.length; i += 100) bf += `${Math.min(100,ents.length-i)} beginbfchar\n` + ents.slice(i,i+100).map(e => `<${hx4(e[0])}> <${u16(e[1])}>`).join("\n") + "\nendbfchar\n";
+    const tu = await stm("", enc0.encode(`/CIDInit /ProcSet findresource begin 12 dict begin begincmap /CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def /CMapName /Adobe-Identity-UCS def /CMapType 2 def 1 begincodespacerange <0000> <FFFF> endcodespacerange\n${bf}endcmap CMapName currentdict /CMap defineresource pop end end`));
+    const t0 = add(`<< /Type /Font /Subtype /Type0 /BaseFont /${F.ps} /Encoding /Identity-H /DescendantFonts [${cf} 0 R] /ToUnicode ${tu} 0 R >>`);
+    const rn = "F" + fontD.length; fontD.push(`/${rn} ${t0} 0 R`); return ufRes[id] = rn;
+  };
   for (const L of S.art) {
     if (L.on === false) continue;
     const [name,hex,cm] = L.col.split("|"), t = Math.max(.01, Math.min(100, L.d||100))/100, b = artBox(L);
+    if (L.k === "logo" && !IMGS[L.img]) continue;
     const X = ox+b.x*k, W = b.w*k, H = b.h*k, Y = pH-(oy+b.y*k)-H;
-    let c = `/${spot(name, altCmyk(name,hex,cm))} cs\n${f(t)} scn\n`;
+    const th = -(L.rot||0)*Math.PI/180, mx = L.mir === "h" ? -1 : 1, my = L.mir === "v" ? -1 : 1, co = Math.cos(th), si = Math.sin(th);
+    const cmM = `${g6(mx*co)} ${g6(mx*si)} ${g6(-my*si)} ${g6(my*co)} ${f(X+W/2)} ${f(Y+H/2)} cm`;
+    let c = L.k === "logo" ? "" : `/${spot(name, altCmyk(name,hex,cm))} cs\n${f(t)} scn\n`;
     if (L.k === "bg") c += `0 0 ${f(pW)} ${f(pH)} re f`;
     else if (L.k === "text") {
-      const key = FONTS[L.f+"-"+L.st] || "Helvetica";
-      if (!fonts[key]) { fonts[key] = "F"+fontD.length; fontD.push(`/${fonts[key]} ${add(`<< /Type /Font /Subtype /Type1 /BaseFont /${key} >>`)} 0 R`); }
-      const th = -(L.rot||0)*Math.PI/180, mx = L.mir==="h"?-1:1, my = L.mir==="v"?-1:1, co = Math.cos(th), si = Math.sin(th), g = v => (+v).toFixed(6);
-      c += `q\n${g(mx*co)} ${g(mx*si)} ${g(-my*si)} ${g(my*co)} ${f(X+W/2)} ${f(Y+H/2)} cm\nBT\n/${fonts[key]} ${f(L.sz)} Tf\n${f(-W/2)} ${f(-H*.3)} Td\n(${pe(L.t||" ")}) Tj\nET\nQ`;
+      let fres, show;
+      if (isUF(L) && used[L.f]) { fres = await ufont(L.f); show = "<" + [...(L.t||" ")].map(ch => FL[L.f].info.gid(ch.codePointAt(0)).toString(16).padStart(4,"0")).join("") + ">"; }
+      else { const key = FONTS[(isUF(L) ? "sans" : L.f) + "-" + (isUF(L) ? "normal" : L.st)] || "Helvetica";
+        if (!fonts[key]) { fonts[key] = "F" + fontD.length; fontD.push(`/${fonts[key]} ${add(`<< /Type /Font /Subtype /Type1 /BaseFont /${key} >>`)} 0 R`); } fres = fonts[key]; show = `(${pe(L.t||" ")})`; }
+      c += `q\n${cmM}\nBT\n/${fres} ${f(L.sz)} Tf\n${f(-W/2)} ${f(-H*.3)} Td\n${show} Tj\nET\nQ`;
+    }
+    else if (L.k === "logo") {
+      const I = IMGS[L.img], D = I.cv.getContext("2d").getImageData(0,0,I.w,I.h).data, np = I.w*I.h, dim = `/Type /XObject /Subtype /Image /Width ${I.w} /Height ${I.h}`; let im;
+      if (L.lm === "full") {
+        const rgb = new Uint8Array(np*3), al = new Uint8Array(np); let needA = t < 1;
+        for (let i = 0, j = 0; j < np; i += 4, j++) { rgb[j*3] = D[i]; rgb[j*3+1] = D[i+1]; rgb[j*3+2] = D[i+2]; al[j] = Math.round(D[i+3]*t); if (D[i+3] < 255) needA = true; }
+        const sm = needA ? await stm(`${dim} /ColorSpace /DeviceGray /BitsPerComponent 8`, al) : 0;
+        im = await stm(`${dim} /ColorSpace /DeviceRGB /BitsPerComponent 8${sm ? ` /SMask ${sm} 0 R` : ""}`, rgb);
+      } else {
+        const tn = new Uint8Array(np), mk = new Uint8Array(np); for (let i = 0, j = 0; j < np; i += 4, j++) { tn[j] = Math.round(tintOf(D,i,L.inv)*t*255); mk[j] = tn[j] ? 255 : 0; }
+        const sm = await stm(`${dim} /ColorSpace /DeviceGray /BitsPerComponent 8`, mk);   // only inked pixels paint — no white knock-out box
+        im = await stm(`${dim} /ColorSpace [/Separation ${nm(name)} /DeviceCMYK ${fn(altCmyk(name,hex,cm))} 0 R] /BitsPerComponent 8 /SMask ${sm} 0 R`, tn);
+      }
+      const rn = "Im" + xo.length; xo.push(`/${rn} ${im} 0 R`);
+      c += `q\n${cmM}\n${f(W)} 0 0 ${f(H)} ${f(-W/2)} ${f(-H/2)} cm\n/${rn} Do\nQ`;
     }
     else if (L.k === "rect" && L.r > 0) c += rr(X,Y,W,H,Math.min(L.r*k,W/2,H/2));
     else c += `${f(X)} ${f(Y)} ${f(W)} ${f(H)} re f`;
-    layer(({bg:"Background",rect:"Rectangle",text:"Text",eye:"Eyemark"})[L.k] + ": " + (L.k==="text" ? L.t : name) + " (" + Math.round(t*100) + "%)", c);
+    layer(({bg:"Background",rect:"Rectangle",text:"Text",eye:"Eyemark",logo:"Logo"})[L.k] + ": " + (L.k === "text" ? L.t : L.k === "logo" ? L.n : name) + (L.k === "logo" && L.lm === "full" ? "" : " (" + Math.round(t*100) + "%)"), c, L.op);
   }
   if ($("ar_cut").checked) {
     csD.push(`/Spot7 [/Separation /7 /DeviceCMYK ${fn([0,1,0,0])} 0 R]`, `/Spot8 [/Separation /8 /DeviceCMYK ${fn([1,0,0,0])} 0 R]`);
-    layer("Cutter lines (spot 7 / 8)", cutOps.join("\n"));
+    layer("Cutter lines (spot 7 / 8)", cutOps.join("\n"), $("ar_cop").checked);
   }
   const ref = ocg.join(" ");
   O[0] = `<< /Type /Catalog /Pages 2 0 R /OCProperties << /OCGs [${ref}] /D << /Order [${ref}] /ON [${ref}] >> >> >>`;
   O[1] = `<< /Type /Pages /Kids [3 0 R] /Count 1 >>`;
-  O[2] = `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${f(pW)} ${f(pH)}] /Resources << /ColorSpace << ${csD.join(" ")} >> /Properties << ${props.join(" ")} >>${fontD.length ? ` /Font << ${fontD.join(" ")} >>` : ""} >> /Contents 4 0 R >>`;
+  O[2] = `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${f(pW)} ${f(pH)}] /Resources << /ColorSpace << ${csD.join(" ")} >> /ExtGState << /GSov << /Type /ExtGState /OP true /op true /OPM 1 >> /GSno << /Type /ExtGState /OP false /op false /OPM 0 >> >> /Properties << ${props.join(" ")} >>${fontD.length ? ` /Font << ${fontD.join(" ")} >>` : ""}${xo.length ? ` /XObject << ${xo.join(" ")} >>` : ""} >> /Contents 4 0 R >>`;
   O[3] = `<< /Length ${body.length} >>\nstream\n${body}endstream`;
-  let pdf = "%PDF-1.5\n", off = [];
-  O.forEach((o,i) => { off.push(pdf.length); pdf += `${i+1} 0 obj\n${o}\nendobj\n`; });
-  const xr = pdf.length;
-  pdf += `xref\n0 ${O.length+1}\n0000000000 65535 f \n` + off.map(o => String(o).padStart(10,"0")+" 00000 n \n").join("") + `trailer\n<< /Size ${O.length+1} /Root 1 0 R /Info << /Title (Cutter + spot artwork) /Producer (Cutter Maker) >> >>\nstartxref\n${xr}\n%%EOF`;
-  const url = URL.createObjectURL(new Blob([pdf], {type:"application/pdf"})), a = document.createElement("a");
+  const enc = new TextEncoder(), parts = [], off = []; let len = 0; const put = u => { if (typeof u === "string") u = enc.encode(u); parts.push(u); len += u.length; };
+  put("%PDF-1.6\n");
+  O.forEach((o,i) => { off.push(len); put(`${i+1} 0 obj\n`); if (typeof o === "string") put(o); else { put(o.h); put(o.b); put("\nendstream"); } put("\nendobj\n"); });
+  const xr = len;
+  put(`xref\n0 ${O.length+1}\n0000000000 65535 f \n` + off.map(o => String(o).padStart(10,"0")+" 00000 n \n").join("") + `trailer\n<< /Size ${O.length+1} /Root 1 0 R /Info << /Title (Cutter + spot artwork) /Producer (Cutter Maker) >> >>\nstartxref\n${xr}\n%%EOF`);
+  const url = URL.createObjectURL(new Blob(parts, {type:"application/pdf"})), a = document.createElement("a");
   a.href = url; a.download = "cutter_artwork_layers.pdf"; document.body.appendChild(a); a.click(); document.body.removeChild(a); setTimeout(() => URL.revokeObjectURL(url), 1500);
 }
 artUI(); palList();
