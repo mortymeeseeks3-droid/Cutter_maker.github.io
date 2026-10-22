@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Cutter Maker v22 · Palette / spot artwork</title>
+<title>Cutter Maker v23 · Palette / spot artwork</title>
 <style>
 [hidden]{display:none!important}
 body{margin:0;background:#111;color:#eee;font-family:sans-serif;height:100vh;display:flex;flex-direction:column-reverse;overflow:hidden}
@@ -190,6 +190,8 @@ body.pf #dimKey{display:none}
       <label class="s2 kT">Font<select id="ar_f"><option value="sans">Sans-serif</option><option value="serif">Serif</option><option value="mono">Monospace</option></select></label>
       <label class="s2 kT">Style<select id="ar_st"><option value="normal">Normal</option><option value="bold">Bold</option><option value="italic">Italic</option><option value="bold-italic">Bold italic</option></select></label>
       <label class="kT">Size pt<input id="ar_sz" type="number" step="any" min="1"></label>
+      <label class="kT">Rotate °<input id="ar_rot" type="number" step="any"></label>
+      <label class="s2 kT">Mirror<select id="ar_mir"><option value="">Off</option><option value="h">Horizontal (flip left↔right)</option><option value="v">Vertical (flip up↔down)</option></select></label>
       <label>Density %<input id="ar_d" type="number" min="1" max="100" step="any"></label>
       <label class="kP">X mm<input id="ar_x" type="number" step="any"></label>
       <label class="kP">Y mm<input id="ar_y" type="number" step="any"></label>
@@ -2382,16 +2384,22 @@ function artBox(L) {
   if (L.k === "bg") { const B = contentBox(), m = 1.5; return {x:B.x0-m, y:B.y0-m, w:B.w+2*m, h:B.h+2*m}; }
   return {x:L.x, y:L.y, w:L.w, h:L.h};
 }
+const txf = (L,b) => { x.translate(b.x+b.w/2, b.y+b.h/2); x.rotate((L.rot||0)*Math.PI/180); x.scale(L.mir==="h"?-1:1, L.mir==="v"?-1:1); };
+function artAABB(L) {   // axis-aligned bounds of the (rotated) layer, for hit-test / snap / align
+  const b = artBox(L); if (L.k !== "text" || !L.rot) return b;
+  const r = L.rot*Math.PI/180, c = Math.abs(Math.cos(r)), s = Math.abs(Math.sin(r)), w = b.w*c+b.h*s, h = b.w*s+b.h*c;
+  return {x:b.x+b.w/2-w/2, y:b.y+b.h/2-h/2, w, h};
+}
 function drawArt(px) {
   S.art.forEach((L,i) => {
     if (L.on === false) return;
     const b = artBox(L), h = L.col.split("|")[1];
     x.save(); x.globalAlpha = Math.max(.03, (L.d||100)/100); x.fillStyle = L.k === "eye" ? "#000" : h;
-    if (L.k === "text") { x.font = fontStr(L, L.sz*PT); x.textBaseline = "alphabetic"; x.fillText(L.t||" ", b.x, b.y+b.h*.8); }
+    if (L.k === "text") { txf(L,b); x.font = fontStr(L, L.sz*PT); x.textBaseline = "alphabetic"; x.fillText(L.t||" ", -b.w/2, b.h*.3); }
     else if (L.k === "rect" && L.r > 0) x.fill(new Path2D(rectD(b.x,b.y,b.w,b.h,{tl:L.r,tr:L.r,br:L.r,bl:L.r})));
     else x.fillRect(b.x, b.y, b.w, b.h);
     x.restore();
-    if (L.k === "eye" || i === artSel) { x.save(); x.lineWidth = (i===artSel?1.5:1)*px; x.strokeStyle = i===artSel ? "#fff" : "#aaa"; x.setLineDash([5*px,4*px]); x.strokeRect(b.x,b.y,b.w,b.h); x.restore(); }
+    if (L.k === "eye" || i === artSel) { x.save(); x.lineWidth = (i===artSel?1.5:1)*px; x.strokeStyle = i===artSel ? "#fff" : "#aaa"; x.setLineDash([5*px,4*px]); const t = L.k === "text"; if (t) txf(L,b); x.strokeRect(t?-b.w/2:b.x, t?-b.h/2:b.y, b.w, b.h); x.restore(); }
   });
 }
 
@@ -2472,7 +2480,7 @@ function artEditor() {
   show(".kT", L.k==="text"); show(".kC", L.k!=="eye"); show(".kE", L.k==="eye"); show(".kB", L.k==="rect"||L.k==="eye"); show(".kR", L.k==="rect"); show(".kP", L.k!=="bg");
   if (L.k === "eye") AR("e").value = L.col.split("|")[0]; else colFill(L.col);
   AR("d").value = L.d||100;
-  if (L.k === "text") { AR("t").value = L.t; AR("f").value = L.f; AR("st").value = L.st; AR("sz").value = L.sz; }
+  if (L.k === "text") { AR("t").value = L.t; AR("f").value = L.f; AR("st").value = L.st; AR("sz").value = L.sz; AR("rot").value = L.rot||0; AR("mir").value = L.mir||""; }
   if (L.k !== "bg") { AR("x").value = R(L.x); AR("y").value = R(L.y); }
   if (L.k === "rect" || L.k === "eye") { AR("w").value = R(L.w); AR("h").value = R(L.h); }
   if (L.k === "rect") AR("r").value = L.r||0;
@@ -2484,7 +2492,7 @@ function artAdd(k) {
   const L = {k, on:true, d:100, col: k==="eye" ? "EYEMARK|#000000" : k==="bg" ? "WHITE|#FFFFFF" : "BLACK|#000000"};
   if (k === "rect") Object.assign(L, {w:Math.min(50,S.mw*.5), h:Math.min(30,S.mh*.5), r:0});
   if (k === "eye") Object.assign(L, {w:10, h:5});
-  if (k === "text") Object.assign(L, {t:"TEXT", f:"sans", st:"normal", sz:36});
+  if (k === "text") Object.assign(L, {t:"TEXT", f:"sans", st:"normal", sz:36, rot:0, mir:""});
   if (k !== "bg") { const b = artBox(L); L.x = R((S.mw-b.w)/2); L.y = R((S.mh-b.h)/2); }
   if (k === "bg") S.art.unshift(L); else S.art.push(L);
   artSel = S.art.indexOf(L); select(-1); artUI(); dr();
@@ -2501,7 +2509,7 @@ $("artP").addEventListener("input", e => {
   if (e.target.id === "ar_q") { colFill(L.col); return; }
   if (L.k === "eye") L.col = AR("e").value + "|#000000"; else if (AR("c").value) L.col = AR("c").value;
   L.d = Math.max(1, Math.min(100, nv("d",100)));
-  if (L.k === "text") { L.t = AR("t").value; L.f = AR("f").value; L.st = AR("st").value; L.sz = Math.max(1, nv("sz",24)); }
+  if (L.k === "text") { L.t = AR("t").value; L.f = AR("f").value; L.st = AR("st").value; L.sz = Math.max(1, nv("sz",24)); L.rot = nv("rot",0); L.mir = AR("mir").value; }
   if (L.k !== "bg") { L.x = nv("x",L.x); L.y = nv("y",L.y); }
   if (L.k === "rect" || L.k === "eye") { L.w = Math.max(.1, nv("w",L.w)); L.h = Math.max(.1, nv("h",L.h)); }
   if (L.k === "rect") L.r = Math.max(0, nv("r",0));
@@ -2509,14 +2517,14 @@ $("artP").addEventListener("input", e => {
 });
 $("artP").addEventListener("click", e => {
   const b = e.target.closest("[data-aa]"), L = S.art[artSel]; if (!b || !L) return;
-  const a = b.dataset.aa, bx = artBox(L); pushUndo();
+  const a = b.dataset.aa, bx = artAABB(L), ox = bx.x-L.x, oy = bx.y-L.y; pushUndo();
   if (a === "del") { S.art.splice(artSel,1); artSel = -1; }
   else if (a === "dup") { const C = JSON.parse(JSON.stringify(L)); if (C.k !== "bg") { C.x = R(C.x+3); C.y = R(C.y+3); } S.art.splice(artSel+1,0,C); artSel++; }
   else if (a === "up" || a === "dn") { const j = artSel + (a==="up"?1:-1); if (j >= 0 && j < S.art.length) { [S.art[artSel],S.art[j]] = [S.art[j],S.art[artSel]]; artSel = j; } }
   else if (a === "fill") { if (L.k==="rect"||L.k==="eye") Object.assign(L, {x:0, y:0, w:S.mw, h:S.mh}); }
   else if (L.k !== "bg") {
-    if (a==="L") L.x = 0; if (a==="R") L.x = R(S.mw-bx.w); if (a==="CH") L.x = R((S.mw-bx.w)/2);
-    if (a==="T") L.y = 0; if (a==="B") L.y = R(S.mh-bx.h); if (a==="CV") L.y = R((S.mh-bx.h)/2);
+    if (a==="L") L.x = R(-ox); if (a==="R") L.x = R(S.mw-bx.w-ox); if (a==="CH") L.x = R((S.mw-bx.w)/2-ox);
+    if (a==="T") L.y = R(-oy); if (a==="B") L.y = R(S.mh-bx.h-oy); if (a==="CV") L.y = R((S.mh-bx.h)/2-oy);
   }
   artUI(); dr();
 });
@@ -2530,16 +2538,16 @@ $("ar_sa").onclick = () => {
 /* ── drag on canvas (selected layer only), arrows, Esc, Delete ── */
 function artDown(e) {
   const L = S.art[artSel], [gx,gy] = toMM(e);
-  if (L && L.k !== "bg" && L.on !== false && !e.shiftKey) { const b = artBox(L);
+  if (L && L.k !== "bg" && L.on !== false && !e.shiftKey) { const b = artAABB(L);
     if (gx>=b.x && gx<=b.x+b.w && gy>=b.y && gy<=b.y+b.h) { pushUndo(); artDrag = {ox:gx-L.x, oy:gy-L.y}; c.setPointerCapture(e.pointerId); return true; } }
   if (artSel >= 0) { artSel = -1; artUI(); }
   return false;
 }
 function artMove(e) {
   const L = S.art[artSel]; if (!L) { artDrag = null; return; }
-  const [gx,gy] = toMM(e), b = artBox(L), thr = 8/S.scale; let nx = gx-artDrag.ox, ny = gy-artDrag.oy; guides = [];
+  const [gx,gy] = toMM(e), b = artAABB(L), ox = b.x-L.x, oy = b.y-L.y, thr = 8/S.scale; let nx = gx-artDrag.ox, ny = gy-artDrag.oy; guides = [];
   const snap = (p,sz,cands,ay) => { if (!e.altKey) for (const off of [0,sz/2,sz]) for (const cd of cands) if (Math.abs(p+off-cd) < thr) { guides.push(ay?{y:cd}:{x:cd}); return cd-off; } return Math.round(p*100)/100; };
-  L.x = R(snap(nx,b.w,[0,S.mw/2,S.mw],0)); L.y = R(snap(ny,b.h,[0,S.mh/2,S.mh],1)); artXY(); dr();
+  L.x = R(snap(nx+ox,b.w,[0,S.mw/2,S.mw],0)-ox); L.y = R(snap(ny+oy,b.h,[0,S.mh/2,S.mh],1)-oy); artXY(); dr();
 }
 addEventListener("keydown", e => {
   if (artSel < 0 || sel >= 0 || selSet.size || /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) return;
@@ -2570,7 +2578,8 @@ function artPdf(cutOps, pW, pH, ox, oy, k) {
     else if (L.k === "text") {
       const key = FONTS[L.f+"-"+L.st] || "Helvetica";
       if (!fonts[key]) { fonts[key] = "F"+fontD.length; fontD.push(`/${fonts[key]} ${add(`<< /Type /Font /Subtype /Type1 /BaseFont /${key} >>`)} 0 R`); }
-      c += `BT\n/${fonts[key]} ${f(L.sz)} Tf\n${f(X)} ${f(pH-(oy+(b.y+b.h*.8)*k))} Td\n(${pe(L.t||" ")}) Tj\nET`;
+      const th = -(L.rot||0)*Math.PI/180, mx = L.mir==="h"?-1:1, my = L.mir==="v"?-1:1, co = Math.cos(th), si = Math.sin(th), g = v => (+v).toFixed(6);
+      c += `q\n${g(mx*co)} ${g(mx*si)} ${g(-my*si)} ${g(my*co)} ${f(X+W/2)} ${f(Y+H/2)} cm\nBT\n/${fonts[key]} ${f(L.sz)} Tf\n${f(-W/2)} ${f(-H*.3)} Td\n(${pe(L.t||" ")}) Tj\nET\nQ`;
     }
     else if (L.k === "rect" && L.r > 0) c += rr(X,Y,W,H,Math.min(L.r*k,W/2,H/2));
     else c += `${f(X)} ${f(Y)} ${f(W)} ${f(H)} re f`;
