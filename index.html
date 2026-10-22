@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Cutter Maker v4</title>
+<title>Cutter Maker v22 · Palette / spot artwork</title>
 <style>
 [hidden]{display:none!important}
 body{margin:0;background:#111;color:#eee;font-family:sans-serif;height:100vh;display:flex;flex-direction:column-reverse;overflow:hidden}
@@ -74,6 +74,12 @@ body.pf #report{bottom:92px}
 #dimKey i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px;vertical-align:middle}
 body.pf #dimKey{display:none}
 #hint{font-size:11px;color:#777;margin-top:10px}
+#artList{display:flex;flex-direction:column;gap:3px;margin-bottom:6px}
+.aRow{display:flex;align-items:center;gap:7px;padding:5px 7px;background:#222;border:1px solid #333;border-radius:4px;font-size:12px;cursor:pointer}
+.aRow.act{border-color:#d6d600;background:#2a2a14}.aRow i{width:12px;height:12px;border:1px solid #666;border-radius:2px;flex:none}
+.aRow span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.aRow input{width:auto;margin:0}
+#artP{border:1px solid #444;border-radius:6px;padding:8px;margin:6px 0}#artP .c4{grid-column:span 4}
+#artP select{max-height:34px}
 </style>
 </head>
 <body>
@@ -171,6 +177,38 @@ body.pf #dimKey{display:none}
       <button id="del" title="Delete">Delete</button>
     </div>
   </div>
+  <h3>Artwork layers <span style="font-weight:normal;font-size:11px;color:#888">palettes · spot colours · each layer = one PDF layer</span></h3>
+  <div id="palList"></div>
+  <div class="btns"><button id="ar_pb" class="eb" type="button">Load palette (.acb / .ase)…</button><input id="ar_pf" type="file" accept=".acb,.ase" multiple hidden></div>
+  <div id="artList"></div>
+  <div class="btns"><button id="aRect" class="eb">+ Rectangle</button><button id="aText" class="eb">+ Text</button><button id="aEye" class="eb">+ Eyemark</button><button id="aBg" class="eb">+ Background</button></div>
+  <div id="artP" hidden>
+    <div class="g">
+      <label class="c4 kT">Text<input id="ar_t" type="text"></label>
+      <label class="c4 kC">Colour — search loaded palettes<input id="ar_q" type="text" placeholder="search…" autocomplete="off"><select id="ar_c"></select></label>
+      <label class="c4 kE">Eyemark type (100% black separation)<select id="ar_e"><option value="EYEMARK">EYEMARK</option><option value="REVERSE_EYEMARK">REVERSE_EYEMARK</option></select></label>
+      <label class="s2 kT">Font<select id="ar_f"><option value="sans">Sans-serif</option><option value="serif">Serif</option><option value="mono">Monospace</option></select></label>
+      <label class="s2 kT">Style<select id="ar_st"><option value="normal">Normal</option><option value="bold">Bold</option><option value="italic">Italic</option><option value="bold-italic">Bold italic</option></select></label>
+      <label class="kT">Size pt<input id="ar_sz" type="number" step="any" min="1"></label>
+      <label>Density %<input id="ar_d" type="number" min="1" max="100" step="any"></label>
+      <label class="kP">X mm<input id="ar_x" type="number" step="any"></label>
+      <label class="kP">Y mm<input id="ar_y" type="number" step="any"></label>
+      <label class="kB">Width<input id="ar_w" type="number" step="any" min="0.1"></label>
+      <label class="kB">Height<input id="ar_h" type="number" step="any" min="0.1"></label>
+      <label class="kR">Corner R<input id="ar_r" type="number" step="any" min="0"></label>
+    </div>
+    <div class="btns kP">
+      <button data-aa="L" title="Left edge">⇤</button><button data-aa="CH" title="Centre horizontally">↔</button><button data-aa="R" title="Right edge">⇥</button>
+      <button data-aa="T" title="Top edge">⤒</button><button data-aa="CV" title="Centre vertically">↕</button><button data-aa="B" title="Bottom edge">⤓</button>
+      <button data-aa="fill" class="kB" title="Fill the cutter profile box">Fill</button>
+    </div>
+    <div class="btns"><button data-aa="up" title="Bring forward (on top in the PDF)">▲ Forward</button><button data-aa="dn" title="Send back">▼ Back</button><button data-aa="dup">Duplicate</button><button data-aa="del">Delete</button></div>
+    <details><summary>Add custom spot colour</summary>
+      <div class="g"><label class="s2">Spot name<input id="ar_sn" type="text" autocomplete="off"></label><label>Screen<input id="ar_sh" type="color" value="#ff6600"></label><label>&nbsp;<button id="ar_sa" type="button">Add</button></label></div>
+    </details>
+  </div>
+  <label class="ck" style="margin:4px 0"><input type="checkbox" id="ar_cut" checked>Include cutter lines (spot 7/8) in the multilayer PDF</label>
+  <div id="hint" style="margin-top:2px">Select an artwork layer to drag it on the canvas (snaps to edges/centre, Alt = free, arrows nudge, Esc deselects). Export ▸ “PDF — multilayer spot artwork + cutter”.</div>
   <div id="hint">Pathfinder: shift-click two or more shapes, then choose <b>Merge</b> (unite) or <b>Trim</b> (cut front shapes out of the back one). Import PDF reads the real vector outlines (outer profile, rectangles with exact corner radii, circles, ovals, dashed lines) — or drop a PDF onto the canvas. Auto layout is on by default: Add packs new shapes against the edges and each other, and profile changes re-pack. Moving a shape by hand turns it off (re-tick it, or press Pack, to re-pack). Drag shapes to move (snaps to edges, centers &amp; other shapes; hold Alt for free move). Arrows nudge 0.1mm (Shift 1mm, Alt 0.01mm). Del removes, Ctrl+D duplicates, Ctrl+Z undoes.</div>
 </div>
 
@@ -196,6 +234,7 @@ body.pf #dimKey{display:none}
       <div id="expMenu" hidden>
         <button id="downloadSvg">SVG — cutter file</button>
         <button id="downloadPdf">PDF — cutter file</button>
+        <button id="downloadPdfArt">PDF — multilayer spot artwork + cutter</button>
         <button id="downloadPdfAnnotated">PDF — colour dimension sheet</button>
         <button id="downloadA4">PDF — A4 formal sheet (client, job no., logo…)</button>
       </div></div>
@@ -252,7 +291,7 @@ body.pf #dimKey{display:none}
 "use strict";
 const $ = id => document.getElementById(id);
 const c = $("c"), x = c.getContext("2d");
-const S = { profileType:"rect", mw:100, mh:100, profileR:{tl:2,tr:2,br:2,bl:2}, profilePath:null, profileRadii:null, profileDash:null, profileEdges:null, placed:[], scale:1, ox:0, oy:0 };
+const S = { profileType:"rect", mw:100, mh:100, profileR:{tl:2,tr:2,br:2,bl:2}, profilePath:null, profileRadii:null, profileDash:null, profileEdges:null, placed:[], art:[], spots:[], scale:1, ox:0, oy:0 };
 let sel = -1, drag = null, guides = [], issues = [], undoStack = [];
 const num = (id, d=0) => { const v = parseFloat($(id).value); return isFinite(v) ? v : d; };
 const R = v => Math.round(v*1e4)/1e4;
@@ -602,6 +641,7 @@ function dr() {
   x.setTransform(d,0,0,d,0,0); x.clearRect(0,0,c.width,c.height);
   x.save(); x.translate(S.ox,S.oy); x.scale(S.scale,S.scale);
   const px = 1/S.scale;
+  drawArt(px);
   x.lineWidth = 2*px; x.strokeStyle = spotHex(7); { const PP=prof(); if (pieceMode(PP)) strokePieces(PP); else { const pd=dashFit(PP); if (pd) { x.strokeStyle=spotHex(PP.dash.spot||7); x.setLineDash([pd.cut,pd.tie]); } x.stroke(new Path2D(shapeD(PP))); x.setLineDash([]); } }
   S.placed.forEach((s,i) => {
     const bad=issues[i], on=i===sel||selSet.has(i);
@@ -639,13 +679,13 @@ function dr() {
 }
 
 /* ───────── Undo ───────── */
-const stateStr = () => JSON.stringify({t:S.profileType,w:S.mw,h:S.mh,r:S.profileR,p:S.placed,pp:S.profilePath,pd:S.profileDash,pe:S.profileEdges,pr:S.profileRadii});
+const stateStr = () => JSON.stringify({t:S.profileType,w:S.mw,h:S.mh,r:S.profileR,p:S.placed,a:S.art,pp:S.profilePath,pd:S.profileDash,pe:S.profileEdges,pr:S.profileRadii});
 function pushUndo() { const s=stateStr(); if (undoStack[undoStack.length-1]!==s) { undoStack.push(s); if (undoStack.length>100) undoStack.shift(); } }
 function undo() {
   let s; do { s = undoStack.pop(); } while (s!==undefined && s===stateStr());
   if (s===undefined) return;
   const o=JSON.parse(s);
-  S.profileType=o.t; S.mw=o.w; S.mh=o.h; S.profileR=o.r; S.placed=o.p; S.profilePath=o.pp||null; S.profileDash=o.pd||null; S.profileEdges=o.pe||null; S.profileRadii=o.pr||null; syncDashUI();
+  S.profileType=o.t; S.mw=o.w; S.mh=o.h; S.profileR=o.r; S.placed=o.p; S.art=o.a||[]; if (artSel>=S.art.length) artSel=-1; artUI(); S.profilePath=o.pp||null; S.profileDash=o.pd||null; S.profileEdges=o.pe||null; S.profileRadii=o.pr||null; syncDashUI();
   $("pShape").value=o.t; $("pW").value=o.w; $("pH").value=o.h;
   $("pTL").value=o.r.tl; $("pTR").value=o.r.tr; $("pBR").value=o.r.br; $("pBL").value=o.r.bl;
   profUI(); select(-1); rs();
@@ -1117,6 +1157,7 @@ function snapPos(s, nx, ny) {
   return [nx,ny];
 }
 c.onpointerdown = e => {
+  if (artDown(e)) return;
   const [gx,gy]=toMM(e), tol=8/S.scale; let best=null, i=-1, k=null, pe=null;
   S.placed.forEach((s,j) => { if (s.type!=="rect" || Math.min(s.w,s.h)*S.scale<24) return; const ed=edgeNear(s,gx,gy,tol);
     if (ed && (!best || ed.d<best.d-1e-9 || (Math.abs(ed.d-best.d)<=1e-9 && j===sel))) best={i:j,k:ed.k,d:ed.d}; });
@@ -1136,12 +1177,13 @@ c.onpointerdown = e => {
   if (i>=0) { pushUndo(); const s=S.placed[i]; drag={ox:gx-s.x,oy:gy-s.y}; c.setPointerCapture(e.pointerId); }
 };
 c.onpointermove = e => {
+  if (artDrag) { artMove(e); return; }
   if (!drag) return;
   const [gx,gy]=toMM(e), s=S.placed[sel]; let nx=gx-drag.ox, ny=gy-drag.oy;
   if (e.altKey) { guides=[]; nx=Math.round(nx*100)/100; ny=Math.round(ny*100)/100; } else [nx,ny]=snapPos(s,nx,ny);
   manualEdit(); s.x=R(nx); s.y=R(ny); fillXY(); dr();
 };
-c.onpointerup = c.onpointercancel = () => { drag=null; guides=[]; dr(); };
+c.onpointerup = c.onpointercancel = () => { drag=null; artDrag=null; guides=[]; dr(); };
 
 addEventListener("keydown", e => {
   const typing = /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName), k=e.key, mod=e.ctrlKey||e.metaKey;
@@ -1592,7 +1634,7 @@ function pdfRR(ops, P, x, y, w, h, tl, tr, br, bl) {
 }
 
 /* PDF export – hand-written, byte-accurate xref, proper PDF operators */
-document.getElementById("downloadPdf").onclick = () => {
+const cutterPdf = (multi) => {
   const margin = 1.5;
   const mm2pt = 72/25.4;
   const CB = contentBox();
@@ -1686,6 +1728,7 @@ document.getElementById("downloadPdf").onclick = () => {
     if (dpx) { ops.push('[] 0 d'); setSpot(r.solidSpot||7); }
   }
 
+  if (multi) { artPdf(ops, pW, pH, ox, oy, mm2pt); return; }
   // Build PDF with byte-accurate xref
   const enc = new TextEncoder();
   const streamBytes = enc.encode(ops.join('\n'));
@@ -1726,6 +1769,8 @@ document.getElementById("downloadPdf").onclick = () => {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 };
+document.getElementById("downloadPdf").onclick = () => cutterPdf(false);
+document.getElementById("downloadPdfArt").onclick = () => cutterPdf(true);
 
 
 /* ── Annotated PDF export ── */
@@ -2304,6 +2349,250 @@ $("a4Cancel").onclick = () => { $("a4Modal").hidden=true; };
 $("a4Go").onclick = () => { $("a4Modal").hidden=true; exportA4().catch(err=>alert("Export failed: "+(err&&err.message||err))); };
 $("a4Modal").addEventListener("keydown", e => { if (e.key==="Escape") $("a4Modal").hidden=true; });
 $("a4Modal").addEventListener("mousedown", e => { if (e.target===$("a4Modal")) $("a4Modal").hidden=true; });
+/* ───────── Artwork layers: Pantone + spot colour libraries (merged from PantoneMaker V10) ───────── */
+let PALS = []; try { PALS = JSON.parse(localStorage.getItem("cm_palettes")||"[]"); } catch(e) {}
+const SPOT_BASE = [["7","#FF00FF","7 — 100% Magenta (cutter line)"],["8","#00FFFF","8 — 100% Cyan (cutter line)"],["PLAIN_BLANK","#FFFFFF"],["WHITE","#FFFFFF"],["CYAN","#00FFFF"],["MAGENTA","#FF00FF"],["YELLOW","#FFFF00"],["BLACK","#000000"]];
+const FONTS = {"sans-normal":"Helvetica","sans-bold":"Helvetica-Bold","sans-italic":"Helvetica-Oblique","sans-bold-italic":"Helvetica-BoldOblique","serif-normal":"Times-Roman","serif-bold":"Times-Bold","serif-italic":"Times-Italic","serif-bold-italic":"Times-BoldItalic","mono-normal":"Courier","mono-bold":"Courier-Bold","mono-italic":"Courier-Oblique","mono-bold-italic":"Courier-BoldOblique"};
+const CF = {sans:"Arial, Helvetica, sans-serif", serif:'"Times New Roman", Times, serif', mono:'"Courier New", Courier, monospace'};
+const PT = 25.4/72, AR = id => $("ar_"+id), mctx = document.createElement("canvas").getContext("2d");
+const esc = s => String(s).replace(/[&<>"]/g, m => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[m]));
+const opt = (n,h,l,cm) => `<option value="${esc(n)}|${h}${cm?"|"+cm:""}">${esc(l||n)}</option>`;
+let artSel = -1, artDrag = null;
+
+function colHtml(q) {
+  const ok = n => !q || n.toLowerCase().includes(q), g = (t,a) => a ? `<optgroup label="${t}">${a}</optgroup>` : "";
+  return g("Cutter / process / special", SPOT_BASE.filter(s=>ok(s[0])).map(s=>opt(s[0],s[1],s[2])).join(""))
+    + g("Custom spots", S.spots.filter(s=>ok(s.n)).map(s=>opt(s.n,s.h)).join(""))
+    + PALS.map(p => g(esc(p.n)+" ("+p.c.length+")", p.c.filter(c=>ok(c[0])).map(c=>opt(c[0],c[1],c[0],c[2])).join(""))).join("");
+}
+function colFill(cur) {
+  const s = AR("c"); s.innerHTML = colHtml(AR("q").value.trim().toLowerCase()); s.value = cur;
+  if (s.value !== cur) { const [n,h] = cur.split("|"); s.insertAdjacentHTML("afterbegin", opt(n,h)); s.value = cur; }
+}
+function altCmyk(n, h, cm) {      // CMYK alternate for the Separation (tint 0 = no ink)
+  if (/^(REVERSE_)?EYEMARK$/.test(n)) return [0,0,0,1];
+  if (cm) return cm.split(",").map(Number);
+  const [r,g,b] = [1,3,5].map(i => parseInt(h.slice(i,i+2),16)/255), k = 1-Math.max(r,g,b);
+  if (k >= .999999) return [0,0,0,1];
+  return [(1-r-k)/(1-k),(1-g-k)/(1-k),(1-b-k)/(1-k),k].map(v => +Math.max(0,Math.min(1,v)).toFixed(4));
+}
+const fontStr = (L, size) => `${/italic/.test(L.st)?"italic ":""}${/bold/.test(L.st)?"bold ":""}${size}px ${CF[L.f]}`;
+function artBox(L) {
+  if (L.k === "text") { mctx.font = fontStr(L, L.sz); return {x:L.x, y:L.y, w:mctx.measureText(L.t||" ").width*PT, h:L.sz*PT}; }
+  if (L.k === "bg") { const B = contentBox(), m = 1.5; return {x:B.x0-m, y:B.y0-m, w:B.w+2*m, h:B.h+2*m}; }
+  return {x:L.x, y:L.y, w:L.w, h:L.h};
+}
+function drawArt(px) {
+  S.art.forEach((L,i) => {
+    if (L.on === false) return;
+    const b = artBox(L), h = L.col.split("|")[1];
+    x.save(); x.globalAlpha = Math.max(.03, (L.d||100)/100); x.fillStyle = L.k === "eye" ? "#000" : h;
+    if (L.k === "text") { x.font = fontStr(L, L.sz*PT); x.textBaseline = "alphabetic"; x.fillText(L.t||" ", b.x, b.y+b.h*.8); }
+    else if (L.k === "rect" && L.r > 0) x.fill(new Path2D(rectD(b.x,b.y,b.w,b.h,{tl:L.r,tr:L.r,br:L.r,bl:L.r})));
+    else x.fillRect(b.x, b.y, b.w, b.h);
+    x.restore();
+    if (L.k === "eye" || i === artSel) { x.save(); x.lineWidth = (i===artSel?1.5:1)*px; x.strokeStyle = i===artSel ? "#fff" : "#aaa"; x.setLineDash([5*px,4*px]); x.strokeRect(b.x,b.y,b.w,b.h); x.restore(); }
+  });
+}
+
+
+/* ── palette loading: Adobe Color Book (.acb) and Swatch Exchange (.ase) ── */
+const hx = (r,g,b) => "#" + [r,g,b].map(v => Math.round(Math.max(0,Math.min(1,v))*255).toString(16).padStart(2,"0")).join("").toUpperCase();
+const cmykHex = (c,m,y,k) => hx((1-c)*(1-k), (1-m)*(1-k), (1-y)*(1-k));
+const cmykStr = a => a.map(z => +Math.max(0,Math.min(1,z)).toFixed(4)).join(",");
+function labHex(L,a,b) {   // CIE Lab (D50) → sRGB
+  const fy = (L+16)/116, fx = fy+a/500, fz = fy-b/200, f = t => t**3 > .008856 ? t**3 : (t-16/116)/7.787;
+  const X = .9642*f(fx), Y = f(fy), Z = .8249*f(fz);
+  return hx(...[3.1338561*X-1.6168667*Y-.4906146*Z, -.9787684*X+1.9161415*Y+.033454*Z, .0719453*X-.2289914*Y+1.4052427*Z].map(v => v <= .0031308 ? 12.92*v : 1.055*Math.pow(v,1/2.4)-.055));
+}
+const clean = s => String(s).replace(/[|,\u0000-\u001f]/g,"").trim();
+function parseASE(buf) {
+  const v = new DataView(buf); if (v.getUint32(0) !== 0x41534546) throw new Error("not an ASE file");
+  const str = (o,l) => { let s = ""; for (let i = 0; i < l; i++) { const ch = v.getUint16(o+i*2); if (ch) s += String.fromCharCode(ch); } return s; };
+  const n = v.getUint32(8), out = []; let p = 12;
+  for (let i = 0; i < n && p+6 <= buf.byteLength; i++) {
+    const t = v.getUint16(p), len = v.getUint32(p+2), q = p+6; p = q+len; if (t !== 1) continue;
+    const nl = v.getUint16(q), name = clean(str(q+2,nl)); let o = q+2+nl*2;
+    const m = String.fromCharCode(v.getUint8(o),v.getUint8(o+1),v.getUint8(o+2),v.getUint8(o+3)).trim().toUpperCase(); o += 4;
+    const f = k => v.getFloat32(o+4*k); let hex, cm;
+    if (m === "CMYK") { const c = [0,1,2,3].map(f); hex = cmykHex(...c); cm = cmykStr(c); }
+    else if (m === "RGB") hex = hx(f(0),f(1),f(2));
+    else if (m === "LAB") hex = labHex(f(0)*100, f(1), f(2));
+    else if (m === "GRAY") { hex = hx(f(0),f(0),f(0)); cm = cmykStr([0,0,0,1-f(0)]); }
+    else continue;
+    out.push([name || "Colour "+(out.length+1), hex, cm]);
+  }
+  return {n:"", c:out};
+}
+function parseACB(buf) {
+  const v = new DataView(buf); if (v.getUint32(0) !== 0x38424342) throw new Error("not an ACB file"); let p = 8;
+  const str = () => { const l = v.getUint32(p); p += 4; let s = ""; for (let i = 0; i < l; i++) s += String.fromCharCode(v.getUint16(p+i*2)); p += l*2; return s; };
+  const un = s => s.startsWith("$$$") ? s.slice(s.lastIndexOf("=")+1) : s;
+  const title = clean(un(str())), pre = un(str()), suf = un(str()); str();
+  const cnt = v.getUint16(p); p += 6; const sp = v.getUint8(p++), nc = sp === 2 ? 4 : 3, out = [];
+  if (![0,2,7].includes(sp)) throw new Error("unsupported ACB colour space ("+sp+")");
+  for (let i = 0; i < cnt && p < buf.byteLength; i++) {
+    const name = clean(pre + un(str()) + suf); p += 6; const b = [...Array(nc)].map((_,k) => v.getUint8(p+k)); p += nc; let hex, cm;
+    if (sp === 0) hex = hx(b[0]/255,b[1]/255,b[2]/255);
+    else if (sp === 2) { const c = b.map(z => (255-z)/255); hex = cmykHex(...c); cm = cmykStr(c); }
+    else hex = labHex(b[0]/2.55, b[1]-128, b[2]-128);
+    if (name) out.push([name, hex, cm]);
+  }
+  return {n:title, c:out};
+}
+const palSave = () => { try { localStorage.setItem("cm_palettes", JSON.stringify(PALS)); } catch(e) {} };
+function palList() {
+  $("palList").innerHTML = PALS.map((p,i) => `<div class="aRow" style="cursor:default"><span>${esc(p.n)} · ${p.c.length} colours</span><button data-pd="${i}" title="Remove palette">✕</button></div>`).join("") || '<div style="font-size:11px;color:#777">No palettes loaded — only cutter / process spots are available.</div>';
+  const L = S.art[artSel]; if (L && L.k !== "eye" && !$("artP").hidden) colFill(L.col);
+}
+$("ar_pb").onclick = () => $("ar_pf").click();
+$("ar_pf").onchange = async e => {
+  const bad = [];
+  for (const file of e.target.files) {
+    try {
+      const buf = await file.arrayBuffer(), pal = /\.ase$/i.test(file.name) ? parseASE(buf) : parseACB(buf);
+      if (!pal.c.length) throw new Error("no colours found");
+      pal.n = pal.n || file.name.replace(/\.[^.]+$/,""); PALS = PALS.filter(p => p.n !== pal.n); PALS.push(pal);
+    } catch (err) { bad.push(file.name + ": " + err.message); }
+  }
+  e.target.value = ""; palSave(); palList(); if (bad.length) alert("Could not read:\n" + bad.join("\n"));
+};
+$("palList").addEventListener("click", e => { const b = e.target.closest("[data-pd]"); if (!b) return; PALS.splice(+b.dataset.pd,1); palSave(); palList(); });
+
+/* ── layer list + editor ── */
+const artName = L => ({rect:"Rectangle",text:"Text",eye:"Eyemark",bg:"Background"})[L.k] + " · " + (L.k==="text" ? L.t : L.col.split("|")[0]);
+function artList() {
+  $("artList").innerHTML = S.art.map((L,i) => `<div class="aRow${i===artSel?" act":""}" data-i="${i}"><input type="checkbox" class="aOn" ${L.on===false?"":"checked"} title="Show / include in PDF"><i style="background:${L.k==="eye"?"#000":L.col.split("|")[1]}"></i><span>${esc(artName(L))}</span></div>`).join("")
+    || '<div style="font-size:11px;color:#777">No artwork layers yet — add one below.</div>';
+}
+function artXY() { const L = S.art[artSel]; if (!L || L.k === "bg") return; for (const k of ["x","y"]) if (document.activeElement !== AR(k)) AR(k).value = R(L[k]); }
+function artEditor() {
+  const L = S.art[artSel]; $("artP").hidden = !L; if (!L) return;
+  const show = (s,on) => document.querySelectorAll(s).forEach(e => e.style.display = on ? "" : "none");
+  show(".kT", L.k==="text"); show(".kC", L.k!=="eye"); show(".kE", L.k==="eye"); show(".kB", L.k==="rect"||L.k==="eye"); show(".kR", L.k==="rect"); show(".kP", L.k!=="bg");
+  if (L.k === "eye") AR("e").value = L.col.split("|")[0]; else colFill(L.col);
+  AR("d").value = L.d||100;
+  if (L.k === "text") { AR("t").value = L.t; AR("f").value = L.f; AR("st").value = L.st; AR("sz").value = L.sz; }
+  if (L.k !== "bg") { AR("x").value = R(L.x); AR("y").value = R(L.y); }
+  if (L.k === "rect" || L.k === "eye") { AR("w").value = R(L.w); AR("h").value = R(L.h); }
+  if (L.k === "rect") AR("r").value = L.r||0;
+}
+const artUI = () => { artList(); artEditor(); };
+function artSelect(i) { artSel = i; select(-1); artUI(); dr(); }
+function artAdd(k) {
+  pushUndo();
+  const L = {k, on:true, d:100, col: k==="eye" ? "EYEMARK|#000000" : k==="bg" ? "WHITE|#FFFFFF" : "BLACK|#000000"};
+  if (k === "rect") Object.assign(L, {w:Math.min(50,S.mw*.5), h:Math.min(30,S.mh*.5), r:0});
+  if (k === "eye") Object.assign(L, {w:10, h:5});
+  if (k === "text") Object.assign(L, {t:"TEXT", f:"sans", st:"normal", sz:36});
+  if (k !== "bg") { const b = artBox(L); L.x = R((S.mw-b.w)/2); L.y = R((S.mh-b.h)/2); }
+  if (k === "bg") S.art.unshift(L); else S.art.push(L);
+  artSel = S.art.indexOf(L); select(-1); artUI(); dr();
+}
+$("aRect").onclick = () => artAdd("rect"); $("aText").onclick = () => artAdd("text"); $("aEye").onclick = () => artAdd("eye"); $("aBg").onclick = () => artAdd("bg");
+$("artList").addEventListener("click", e => {
+  const r = e.target.closest(".aRow"); if (!r) return; const i = +r.dataset.i;
+  if (e.target.classList.contains("aOn")) { pushUndo(); S.art[i].on = e.target.checked; dr(); return; }
+  artSelect(i);
+});
+const nv = (id,d) => { const v = parseFloat(AR(id).value); return isFinite(v) ? v : d; };
+$("artP").addEventListener("input", e => {
+  const L = S.art[artSel]; if (!L || /^ar_s[nh]$/.test(e.target.id)) return;
+  if (e.target.id === "ar_q") { colFill(L.col); return; }
+  if (L.k === "eye") L.col = AR("e").value + "|#000000"; else if (AR("c").value) L.col = AR("c").value;
+  L.d = Math.max(1, Math.min(100, nv("d",100)));
+  if (L.k === "text") { L.t = AR("t").value; L.f = AR("f").value; L.st = AR("st").value; L.sz = Math.max(1, nv("sz",24)); }
+  if (L.k !== "bg") { L.x = nv("x",L.x); L.y = nv("y",L.y); }
+  if (L.k === "rect" || L.k === "eye") { L.w = Math.max(.1, nv("w",L.w)); L.h = Math.max(.1, nv("h",L.h)); }
+  if (L.k === "rect") L.r = Math.max(0, nv("r",0));
+  artList(); dr();
+});
+$("artP").addEventListener("click", e => {
+  const b = e.target.closest("[data-aa]"), L = S.art[artSel]; if (!b || !L) return;
+  const a = b.dataset.aa, bx = artBox(L); pushUndo();
+  if (a === "del") { S.art.splice(artSel,1); artSel = -1; }
+  else if (a === "dup") { const C = JSON.parse(JSON.stringify(L)); if (C.k !== "bg") { C.x = R(C.x+3); C.y = R(C.y+3); } S.art.splice(artSel+1,0,C); artSel++; }
+  else if (a === "up" || a === "dn") { const j = artSel + (a==="up"?1:-1); if (j >= 0 && j < S.art.length) { [S.art[artSel],S.art[j]] = [S.art[j],S.art[artSel]]; artSel = j; } }
+  else if (a === "fill") { if (L.k==="rect"||L.k==="eye") Object.assign(L, {x:0, y:0, w:S.mw, h:S.mh}); }
+  else if (L.k !== "bg") {
+    if (a==="L") L.x = 0; if (a==="R") L.x = R(S.mw-bx.w); if (a==="CH") L.x = R((S.mw-bx.w)/2);
+    if (a==="T") L.y = 0; if (a==="B") L.y = R(S.mh-bx.h); if (a==="CV") L.y = R((S.mh-bx.h)/2);
+  }
+  artUI(); dr();
+});
+$("ar_sa").onclick = () => {
+  const n = AR("sn").value.replace(/[|,]/g,"").trim(), h = AR("sh").value.toUpperCase(); if (!n) return;
+  if (!S.spots.some(s => s.n === n)) S.spots.push({n,h});
+  const L = S.art[artSel]; if (L && L.k !== "eye") { pushUndo(); L.col = n+"|"+h; colFill(L.col); artList(); dr(); } else if (L) colFill(L.col);
+  AR("sn").value = "";
+};
+
+/* ── drag on canvas (selected layer only), arrows, Esc, Delete ── */
+function artDown(e) {
+  const L = S.art[artSel], [gx,gy] = toMM(e);
+  if (L && L.k !== "bg" && L.on !== false && !e.shiftKey) { const b = artBox(L);
+    if (gx>=b.x && gx<=b.x+b.w && gy>=b.y && gy<=b.y+b.h) { pushUndo(); artDrag = {ox:gx-L.x, oy:gy-L.y}; c.setPointerCapture(e.pointerId); return true; } }
+  if (artSel >= 0) { artSel = -1; artUI(); }
+  return false;
+}
+function artMove(e) {
+  const L = S.art[artSel]; if (!L) { artDrag = null; return; }
+  const [gx,gy] = toMM(e), b = artBox(L), thr = 8/S.scale; let nx = gx-artDrag.ox, ny = gy-artDrag.oy; guides = [];
+  const snap = (p,sz,cands,ay) => { if (!e.altKey) for (const off of [0,sz/2,sz]) for (const cd of cands) if (Math.abs(p+off-cd) < thr) { guides.push(ay?{y:cd}:{x:cd}); return cd-off; } return Math.round(p*100)/100; };
+  L.x = R(snap(nx,b.w,[0,S.mw/2,S.mw],0)); L.y = R(snap(ny,b.h,[0,S.mh/2,S.mh],1)); artXY(); dr();
+}
+addEventListener("keydown", e => {
+  if (artSel < 0 || sel >= 0 || selSet.size || /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) return;
+  const L = S.art[artSel], k = e.key; if (!L) return;
+  if (k === "Escape") { artSel = -1; artUI(); dr(); }
+  else if (k === "Delete" || k === "Backspace") { e.preventDefault(); pushUndo(); S.art.splice(artSel,1); artSel = -1; artUI(); dr(); }
+  else if (k.startsWith("Arrow") && L.k !== "bg") { e.preventDefault(); pushUndo(); const st = e.shiftKey?1:e.altKey?.01:.1;
+    if (k==="ArrowLeft") L.x = R(L.x-st); if (k==="ArrowRight") L.x = R(L.x+st); if (k==="ArrowUp") L.y = R(L.y-st); if (k==="ArrowDown") L.y = R(L.y+st); artXY(); dr(); }
+});
+
+/* ── multilayer spot-colour PDF: every layer is its own OCG, every colour a named Separation ── */
+function artPdf(cutOps, pW, pH, ox, oy, k) {
+  const O = [null,null,null,null]; let n = 4; const add = s => { O.push(s); return ++n; };
+  const f = v => (+v).toFixed(3), pe = s => String(s).replace(/[^\x20-\x7E]/g,"?").replace(/[\\()]/g,"\\$&");
+  const nm = s => "/" + String(s).replace(/[^A-Za-z0-9_.-]/g, m => "#" + m.charCodeAt(0).toString(16).padStart(2,"0"));
+  const fn = alt => add(`<< /FunctionType 2 /Domain [0 1] /Range [0 1 0 1 0 1 0 1] /C0 [0 0 0 0] /C1 [${alt.join(" ")}] /N 1 >>`);
+  const cs = {}, csD = [], ocg = [], props = [], fonts = {}, fontD = []; let body = "";
+  const spot = (name,alt) => { if (!cs[name]) { cs[name] = "CS"+csD.length; csD.push(`/${cs[name]} [/Separation ${nm(name)} /DeviceCMYK ${fn(alt)} 0 R]`); } return cs[name]; };
+  const layer = (label, content) => { const o = add(`<< /Type /OCG /Name (${pe(label)}) >>`); ocg.push(o+" 0 R"); const mc = "MC"+props.length; props.push(`/${mc} ${o} 0 R`); body += `/OC /${mc} BDC\nq\n${content}\nQ\nEMC\n`; };
+  const rr = (X,Y,W,H,r) => { const q = r*.5523, v = a => f(a);
+    return `${v(X+r)} ${v(Y)} m ${v(X+W-r)} ${v(Y)} l ${v(X+W-r+q)} ${v(Y)} ${v(X+W)} ${v(Y+r-q)} ${v(X+W)} ${v(Y+r)} c ${v(X+W)} ${v(Y+H-r)} l ${v(X+W)} ${v(Y+H-r+q)} ${v(X+W-r+q)} ${v(Y+H)} ${v(X+W-r)} ${v(Y+H)} c ${v(X+r)} ${v(Y+H)} l ${v(X+r-q)} ${v(Y+H)} ${v(X)} ${v(Y+H-r+q)} ${v(X)} ${v(Y+H-r)} c ${v(X)} ${v(Y+r)} l ${v(X)} ${v(Y+r-q)} ${v(X+r-q)} ${v(Y)} ${v(X+r)} ${v(Y)} c h f`; };
+  for (const L of S.art) {
+    if (L.on === false) continue;
+    const [name,hex,cm] = L.col.split("|"), t = Math.max(.01, Math.min(100, L.d||100))/100, b = artBox(L);
+    const X = ox+b.x*k, W = b.w*k, H = b.h*k, Y = pH-(oy+b.y*k)-H;
+    let c = `/${spot(name, altCmyk(name,hex,cm))} cs\n${f(t)} scn\n`;
+    if (L.k === "bg") c += `0 0 ${f(pW)} ${f(pH)} re f`;
+    else if (L.k === "text") {
+      const key = FONTS[L.f+"-"+L.st] || "Helvetica";
+      if (!fonts[key]) { fonts[key] = "F"+fontD.length; fontD.push(`/${fonts[key]} ${add(`<< /Type /Font /Subtype /Type1 /BaseFont /${key} >>`)} 0 R`); }
+      c += `BT\n/${fonts[key]} ${f(L.sz)} Tf\n${f(X)} ${f(pH-(oy+(b.y+b.h*.8)*k))} Td\n(${pe(L.t||" ")}) Tj\nET`;
+    }
+    else if (L.k === "rect" && L.r > 0) c += rr(X,Y,W,H,Math.min(L.r*k,W/2,H/2));
+    else c += `${f(X)} ${f(Y)} ${f(W)} ${f(H)} re f`;
+    layer(({bg:"Background",rect:"Rectangle",text:"Text",eye:"Eyemark"})[L.k] + ": " + (L.k==="text" ? L.t : name) + " (" + Math.round(t*100) + "%)", c);
+  }
+  if ($("ar_cut").checked) {
+    csD.push(`/Spot7 [/Separation /7 /DeviceCMYK ${fn([0,1,0,0])} 0 R]`, `/Spot8 [/Separation /8 /DeviceCMYK ${fn([1,0,0,0])} 0 R]`);
+    layer("Cutter lines (spot 7 / 8)", cutOps.join("\n"));
+  }
+  const ref = ocg.join(" ");
+  O[0] = `<< /Type /Catalog /Pages 2 0 R /OCProperties << /OCGs [${ref}] /D << /Order [${ref}] /ON [${ref}] >> >> >>`;
+  O[1] = `<< /Type /Pages /Kids [3 0 R] /Count 1 >>`;
+  O[2] = `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${f(pW)} ${f(pH)}] /Resources << /ColorSpace << ${csD.join(" ")} >> /Properties << ${props.join(" ")} >>${fontD.length ? ` /Font << ${fontD.join(" ")} >>` : ""} >> /Contents 4 0 R >>`;
+  O[3] = `<< /Length ${body.length} >>\nstream\n${body}endstream`;
+  let pdf = "%PDF-1.5\n", off = [];
+  O.forEach((o,i) => { off.push(pdf.length); pdf += `${i+1} 0 obj\n${o}\nendobj\n`; });
+  const xr = pdf.length;
+  pdf += `xref\n0 ${O.length+1}\n0000000000 65535 f \n` + off.map(o => String(o).padStart(10,"0")+" 00000 n \n").join("") + `trailer\n<< /Size ${O.length+1} /Root 1 0 R /Info << /Title (Cutter + spot artwork) /Producer (Cutter Maker) >> >>\nstartxref\n${xr}\n%%EOF`;
+  const url = URL.createObjectURL(new Blob([pdf], {type:"application/pdf"})), a = document.createElement("a");
+  a.href = url; a.download = "cutter_artwork_layers.pdf"; document.body.appendChild(a); a.click(); document.body.removeChild(a); setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+artUI(); palList();
 profUI(); addUI(); readProfile();
 </script>
 </body>
