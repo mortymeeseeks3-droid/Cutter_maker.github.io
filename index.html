@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Cutter Maker v24 · Palette / spot artwork</title>
+<title>Cutter Maker v25 · Palette / spot artwork</title>
 <style>
 [hidden]{display:none!important}
 body{margin:0;background:#111;color:#eee;font-family:sans-serif;height:100vh;display:flex;flex-direction:column-reverse;overflow:hidden}
@@ -217,6 +217,7 @@ body.pf #dimKey{display:none}
   </div>
   <div class="btns"><button id="opOn" class="eb" type="button">Overprint ALL on</button><button id="opOff" class="eb" type="button">Overprint ALL off</button></div>
   <label class="ck" style="margin:4px 0"><input type="checkbox" id="ar_cop">Cutter lines overprint</label>
+  <label class="ck" style="margin:4px 0"><input type="checkbox" id="ar_dim">Include dimensions layer — follows the Sizes / Gaps / Radii / Selected-only toggles</label>
   <label class="ck" style="margin:4px 0"><input type="checkbox" id="ar_cut" checked>Include cutter lines (spot 7/8) in the multilayer PDF</label>
   <div id="hint" style="margin-top:2px">Select an artwork layer to drag it on the canvas (snaps to edges/centre, Alt = free, arrows nudge, Esc deselects). Export ▸ “PDF — multilayer spot artwork + cutter”.</div>
   <div id="hint">Pathfinder: shift-click two or more shapes, then choose <b>Merge</b> (unite) or <b>Trim</b> (cut front shapes out of the back one). Import PDF reads the real vector outlines (outer profile, rectangles with exact corner radii, circles, ovals, dashed lines) — or drop a PDF onto the canvas. Auto layout is on by default: Add packs new shapes against the edges and each other, and profile changes re-pack. Moving a shape by hand turns it off (re-tick it, or press Pack, to re-pack). Drag shapes to move (snaps to edges, centers &amp; other shapes; hold Alt for free move). Arrows nudge 0.1mm (Shift 1mm, Alt 0.01mm). Del removes, Ctrl+D duplicates, Ctrl+Z undoes.</div>
@@ -546,8 +547,9 @@ window.onresize = rs;
 /* ───────── On-screen dimensions (toggle: Dims button or D key) ───────── */
 const dim = { on:false, size:true, gap:true, rad:true, sel:false };
 const DIMCOL = ["#ff5e5b","#ff9f1c","#ffd93d","#9be564","#2ee6a6","#3ddcff","#a06bff","#ff5cc8","#ffb38a","#19c3a0","#ff8fb1","#d4f23a"];
-function drawDims() {
-  const sc=S.scale, X=v=>S.ox+v*sc, Y=v=>S.oy+v*sc;
+function drawDims() { drawDimsOn(x, S.scale, S.ox, S.oy); }
+function drawDimsOn(x, sc, ox0, oy0) {
+  const X=v=>ox0+v*sc, Y=v=>oy0+v*sc;
   const fm=v=>String(Math.round(v*100)/100);
   x.save(); x.font="bold 11px sans-serif"; x.lineWidth=1;
   const txt=(s,px,py,col,rot,al,bl)=>{ x.save(); x.translate(px,py); if(rot) x.rotate(-Math.PI/2);
@@ -1809,7 +1811,7 @@ function computeGaps() {
     if (best) { g=best.d; mid=best.mid; } else { mid=(a[pl]+a[ph])/2; const e=edgeAt(ax,sg,mid); g=sg>0?e-from:from-e; }
     if (!(g>0.05)) return;
     const to=from+sg*g, key=`${ax}|${R(Math.min(from,to))}|${R(Math.max(from,to))}|${R(mid)}`;
-    if (seen.has(key)) return; seen.add(key); out.push({ax,from,to,mid,g});
+    if (seen.has(key)) return; seen.add(key); out.push({ax,from,to,mid,g,i});
   } });
   return out;
 }
@@ -1931,21 +1933,22 @@ document.getElementById("downloadPdfAnnotated").onclick = () => {
   ops.push(`${hex(BC)} RG 1.6 w`); { if (pieceMode(P0)) pdfEdgePieces(ops,Pp,P0,gx,gy,m); else { const dp=dashPdf(P0,m); if (dp) ops.push(dp); shapePath(P0,"S"); if (dp) ops.push("[] 0 d"); } }
 
   /* 3 ▸ gap dimensions (neutral) */
-  for (const g of computeGaps()) {
+  for (const g of (dim.gap ? computeGaps().filter(g => !dim.sel || g.i===sel) : [])) {
     if (g.ax===0) dimH(gx(g.from),gx(g.to),gy(g.mid),d2(g.g),"#e5e7eb",0,5,0.4,"#3a3f47",3); else dimV(gy(g.from),gy(g.to),gx(g.mid),d2(g.g),"#e5e7eb",0,5,0.4,"#3a3f47",3);
   }
 
   /* 4 ▸ shape dimensions */
   const corners=s=>[["tl",s.x,s.y,1,1],["tr",s.x+s.w,s.y,-1,1],["br",s.x+s.w,s.y+s.h,-1,-1],["bl",s.x,s.y+s.h,1,-1]];
   sh.forEach((s,i)=>{
+    if (dim.sel && i!==sel) return;
     const hx=DIMCOL[i%DIMCOL.length], cxm=s.x+s.w/2, cym=s.y+s.h/2;
     if (s.type==="dash") {
       const q=fitDash(s), len=s.orient==="h"?s.w:s.h, str=`${d2(len)}mm   cut ${d2(q.cut)} / tie ${d2(q.tie)}`;
-      if (s.orient==="h") dimH(gx(s.x),gx(s.x+s.w),gy(s.y-3.2),str,hx,0,5.6); else dimV(gy(s.y),gy(s.y+s.h),gx(s.x-3.2),str,hx,0,5.6);
+      if (!dim.size) {} else if (s.orient==="h") dimH(gx(s.x),gx(s.x+s.w),gy(s.y-3.2),str,hx,0,5.6); else dimV(gy(s.y),gy(s.y+s.h),gx(s.x-3.2),str,hx,0,5.6);
       return;
     }
     const round=s.type==="circle"||s.type==="oval";
-    if (round) {
+    if (!dim.size) {} else if (round) {
       dimH(gx(s.x),gx(s.x+s.w),gy(cym),(s.type==="circle"?"Ø":"")+d2(s.w)+"mm",hx,0,5.6);
       if (s.type==="oval") dimV(gy(s.y),gy(s.y+s.h),gx(cxm),d2(s.h)+"mm",hx,0,5.6);
     } else {
@@ -1957,7 +1960,7 @@ document.getElementById("downloadPdfAnnotated").onclick = () => {
       obst.push([X-2.1*m-1,Y-2.1*m-1,X+2.1*m+1,Y+2.1*m+1]);
       late.push(()=>{ ops.push(`${hex(hx)} rg 0.09 0.10 0.12 RG 0.6 w`); ellp(X,Y,2.1*m,2.1*m,"B"); ops.push(`0.08 0.09 0.1 rg BT /F2 6 Tf 1 0 0 1 ${f(X-tw(t,6,true)/2)} ${f(pH-Y-2.1)} Tm (${t}) Tj ET`); });
     }
-    if (s.type==="rect" && Math.min(s.w,s.h)>=10) {
+    if (dim.rad && s.type==="rect" && Math.min(s.w,s.h)>=10) {
       const fr=fitR(s.w,s.h,s.r||{});
       for (const [k,cx,cy,sx,sy] of corners(s)) {
         const r=fr[k]; if (r<0.005) continue;
@@ -1980,23 +1983,26 @@ document.getElementById("downloadPdfAnnotated").onclick = () => {
     for (const A of D.arcs) Q.push({str:"R"+d2(A.r),cx:gx(A.mx)+A.nx*5*m,cy:gy(A.my)+A.ny*5*m,hx,rot:false,sz:5.2,axis:null,prio:2,leader:[gx(A.mx),gy(A.my)]});
     for (const C of D.circles) Q.push({str:"Ø"+d2(2*C.r),cx:gx(C.cx),cy:gy(C.cy),hx,rot:false,sz:5.4,axis:null,prio:1});
   };
-  sh.forEach((s,i)=>{ if (s.type==="path"&&s.closed) pathDimsPdf(s,DIMCOL[i%DIMCOL.length]); });
-  if (S.profileType==="path") pathDimsPdf(P0,BL);
+  sh.forEach((s,i)=>{ if (dim.size && (!dim.sel||i===sel) && s.type==="path"&&s.closed) pathDimsPdf(s,DIMCOL[i%DIMCOL.length]); });
+  if (dim.size && (!dim.sel||sel<0) && S.profileType==="path") pathDimsPdf(P0,BL);
 
   /* 5 ▸ outer profile dimensions (process blue) */
   const circ=S.profileType==="circle";
   const ext=(x1,y1,x2,y2)=>thin(x1,y1,x2,y2,hex(BC),0.35);
+  const outerOn=!dim.sel||sel<0;
+  if (dim.size && outerOn) {
   ext(gx(0),gy(-1),gx(0),gy(by0-11.5)); ext(gx(S.mw),gy(-1),gx(S.mw),gy(by0-11.5));
   dimH(gx(0),gx(S.mw),gy(by0-10),(circ?"Ø":"")+d2(S.mw)+"mm",BL,0,7.5,0.8,BC,0);
   if (!circ) { ext(gx(-1),gy(0),gx(bx0-11.5),gy(0)); ext(gx(-1),gy(S.mh),gx(bx0-11.5),gy(S.mh)); dimV(gy(0),gy(S.mh),gx(bx0-10),d2(S.mh)+"mm",BL,0,7.5,0.8,BC,0); }
-  if (S.profileType==="rect") {
+  }
+  if (dim.rad && outerOn && S.profileType==="rect") {
     const fr=fitR(S.mw,S.mh,S.profileR);
     for (const [k,cx,cy,sx,sy] of corners({x:0,y:0,w:S.mw,h:S.mh})) {
       const r=fr[k]; if (r<0.005) continue;
       Q.push({str:"R"+d2(r),cx:gx(cx+sx*(r*.4+10)),cy:gy(cy-sy*4.6),hx:BL,rot:false,sz:6,axis:null,prio:0,leader:[gx(cx+sx*r*.2929),gy(cy+sy*r*.2929)]});
     }
   }
-  for (const r of dashRecords()) { if (r.name==="Line") continue;
+  for (const r of dashRecords()) { if (r.name==="Line" || !dim.size || (dim.sel && !(r.idx===sel || (r.idx<0 && sel<0)))) continue;
     Q.push({str:`${r.name==="Outline"?"dashed":r.name.replace(" edge","")} · cut ${d2(r.cut)} / tie ${d2(r.tie)}`,cx:gx(r.ax)+r.dir[0]*3*m,cy:gy(r.ay)+r.dir[1]*3*m,hx:r.idx<0?BL:DIMCOL[r.idx%DIMCOL.length],rot:false,sz:5.2,axis:null,prio:1}); }
   late.forEach(fn=>fn()); placeLabels();
 
@@ -2671,14 +2677,15 @@ const enc0 = new TextEncoder();
 async function artPdf(cutOps, pW, pH, ox, oy, k) {
   const O = [null,null,null,null]; let n = 4; const add = s => { O.push(s); return ++n; };
   const stm = async (dict, u8) => { const z = await deflate(u8), b = z || u8; return add({h:`<< ${dict} ${z ? "/Filter /FlateDecode " : ""}/Length ${b.length} >>\nstream\n`, b}); };
-  const f = v => (+v).toFixed(3), g6 = v => (+v).toFixed(6), pe = s => String(s).replace(/[^\x20-\x7E]/g,"?").replace(/[\\()]/g,"\\$&");
+  const f = v => (+v).toFixed(3), g6 = v => (+v).toFixed(6), pe = s => String(s).replace(/[\\()]/g,"\\$&").replace(/[^\x20-\x7E]/g, ch => { const n = ch.charCodeAt(0); return n >= 0xA0 && n <= 0xFF ? "\\" + n.toString(8) : "?"; });
   const nm = s => "/" + String(s).replace(/[^A-Za-z0-9_.-]/g, m => "#" + m.charCodeAt(0).toString(16).padStart(2,"0"));
   const fn = alt => add(`<< /FunctionType 2 /Domain [0 1] /Range [0 1 0 1 0 1 0 1] /C0 [0 0 0 0] /C1 [${alt.join(" ")}] /N 1 >>`);
   const cs = {}, csD = [], ocg = [], props = [], fonts = {}, fontD = [], xo = [], used = {}, ufRes = {}; let body = "";
   const spot = (name,alt) => { if (!cs[name]) { cs[name] = "CS"+csD.length; csD.push(`/${cs[name]} [/Separation ${nm(name)} /DeviceCMYK ${fn(alt)} 0 R]`); } return cs[name]; };
-  const layer = (label, content, op) => { const o = add(`<< /Type /OCG /Name (${pe(label)}) >>`); ocg.push(o+" 0 R"); const mc = "MC"+props.length; props.push(`/${mc} ${o} 0 R`); body += `/OC /${mc} BDC\nq\n/${op ? "GSov" : "GSno"} gs\n${content}\nQ\nEMC\n`; };
+  const npl = [], layer = (label, content, op, np) => { const o = add(`<< /Type /OCG /Name (${pe(label)}) ${np ? "/Usage << /Print << /Subtype /Print /PrintState /OFF >> /View << /ViewState /ON >> >> " : ""}>>`); ocg.push(o+" 0 R"); if (np) npl.push(o+" 0 R"); const mc = "MC"+props.length; props.push(`/${mc} ${o} 0 R`); body += `/OC /${mc} BDC\nq\n/${op ? "GSov" : "GSno"} gs\n${content}\nQ\nEMC\n`; };
   const rr = (X,Y,W,H,r) => { const q = r*.5523, v = a => f(a);
     return `${v(X+r)} ${v(Y)} m ${v(X+W-r)} ${v(Y)} l ${v(X+W-r+q)} ${v(Y)} ${v(X+W)} ${v(Y+r-q)} ${v(X+W)} ${v(Y+r)} c ${v(X+W)} ${v(Y+H-r)} l ${v(X+W)} ${v(Y+H-r+q)} ${v(X+W-r+q)} ${v(Y+H)} ${v(X+W-r)} ${v(Y+H)} c ${v(X+r)} ${v(Y+H)} l ${v(X+r-q)} ${v(Y+H)} ${v(X)} ${v(Y+H-r+q)} ${v(X)} ${v(Y+H-r)} c ${v(X)} ${v(Y+r)} l ${v(X)} ${v(Y+r-q)} ${v(X+r-q)} ${v(Y)} ${v(X+r)} ${v(Y)} c h f`; };
+  const baseF = key => { if (!fonts[key]) { fonts[key] = "F" + fontD.length; fontD.push(`/${fonts[key]} ${add(`<< /Type /Font /Subtype /Type1 /BaseFont /${key} /Encoding /WinAnsiEncoding >>`)} 0 R`); } return fonts[key]; };
   // fonts: gather the glyphs each loaded font needs, then embed each font once
   for (const L of S.art) if (L.k === "text" && L.on !== false && isUF(L)) { const F = await ensureFont(L.f); if (F) { const u = used[L.f] = used[L.f] || new Map(); for (const ch of (L.t||" ")) u.set(F.gid(ch.codePointAt(0)), ch.codePointAt(0)); } }
   const ufont = async id => {
@@ -2693,6 +2700,31 @@ async function artPdf(cutOps, pW, pH, ox, oy, k) {
     const t0 = add(`<< /Type /Font /Subtype /Type0 /BaseFont /${F.ps} /Encoding /Identity-H /DescendantFonts [${cf} 0 R] /ToUnicode ${tu} 0 R >>`);
     const rn = "F" + fontD.length; fontD.push(`/${rn} ${t0} 0 R`); return ufRes[id] = rn;
   };
+  const pdfRec = vs => {   // records the preview's canvas dimension drawing as PDF operators (virtual px -> pt)
+    const q = k/vs, ops = [], stack = [], F = baseF("Helvetica-Bold"), cx = {fillStyle:"#000", strokeStyle:"#000", lineWidth:1, font:"11px sans-serif", textAlign:"start", textBaseline:"alphabetic"};
+    let M = [1,0,0,1,0,0], path = [];
+    const P = (a,b) => [ox + (M[0]*a+M[2]*b+M[4])*q, pH-oy - (M[1]*a+M[3]*b+M[5])*q], pt = (a,b) => P(a,b).map(f).join(" ");
+    const col = s => /^#/.test(s) ? [1,3,5].map(i => (parseInt(s.substr(i,2),16)/255).toFixed(3)).join(" ") : s.match(/[\d.]+/g).slice(0,3).map(v => (v/255).toFixed(3)).join(" ");
+    const text = (s, a, b, stroke) => {
+      const sz = parseFloat(cx.font.match(/([\d.]+)px/)[1]); mctx.font = "bold 100px Arial"; const w = mctx.measureText(s).width*sz/100;
+      const [X,Y] = P(a + (cx.textAlign === "center" ? -w/2 : cx.textAlign === "right" ? -w : 0), b + (cx.textBaseline === "bottom" ? -.2*sz : cx.textBaseline === "top" ? .8*sz : 0)), th = Math.atan2(-M[1], M[0]);
+      const body = `BT\n/${F} ${f(sz*q)} Tf ${stroke ? 1 : 0} Tr\n${g6(Math.cos(th))} ${g6(Math.sin(th))} ${g6(-Math.sin(th))} ${g6(Math.cos(th))} ${f(X)} ${f(Y)} Tm\n(${pe(s)}) Tj\nET`;
+      ops.push(stroke ? `q ${col(cx.strokeStyle)} RG ${f(cx.lineWidth*q)} w 1 j 1 J\n${body}\nQ` : `${col(cx.fillStyle)} rg\n${body}`);
+    };
+    Object.assign(cx, {
+      save() { stack.push([M.slice(), cx.fillStyle, cx.strokeStyle, cx.lineWidth, cx.font, cx.textAlign, cx.textBaseline]); },
+      restore() { [M, cx.fillStyle, cx.strokeStyle, cx.lineWidth, cx.font, cx.textAlign, cx.textBaseline] = stack.pop(); },
+      translate(a,b) { M[4] += M[0]*a+M[2]*b; M[5] += M[1]*a+M[3]*b; },
+      rotate(t) { const c = Math.cos(t), s = Math.sin(t); M = [M[0]*c+M[2]*s, M[1]*c+M[3]*s, -M[0]*s+M[2]*c, -M[1]*s+M[3]*c, M[4], M[5]]; },
+      beginPath() { path = []; }, moveTo(a,b) { path.push(pt(a,b)+" m"); }, lineTo(a,b) { path.push(pt(a,b)+" l"); }, closePath() { path.push("h"); },
+      stroke() { ops.push(`${col(cx.strokeStyle)} RG ${f(cx.lineWidth*q)} w\n${path.join("\n")} S`); },
+      fill() { ops.push(`${col(cx.fillStyle)} rg\n${path.join("\n")} f`); },
+      strokeText(s,a,b) { text(s,a,b,true); }, fillText(s,a,b) { text(s,a,b,false); }
+    });
+    return {ctx: cx, ops};
+  };
+  const dimsOn = $("ar_dim").checked, pad = dimsOn ? 12*k : 0;   // room outside the profile for dimension lines
+  if (dimsOn) { pW += 2*pad; pH += 2*pad; ox += pad; oy += pad; }
   for (const L of S.art) {
     if (L.on === false) continue;
     const [name,hex,cm] = L.col.split("|"), t = Math.max(.01, Math.min(100, L.d||100))/100, b = artBox(L);
@@ -2706,7 +2738,7 @@ async function artPdf(cutOps, pW, pH, ox, oy, k) {
       let fres, show;
       if (isUF(L) && used[L.f]) { fres = await ufont(L.f); show = "<" + [...(L.t||" ")].map(ch => FL[L.f].info.gid(ch.codePointAt(0)).toString(16).padStart(4,"0")).join("") + ">"; }
       else { const key = FONTS[(isUF(L) ? "sans" : L.f) + "-" + (isUF(L) ? "normal" : L.st)] || "Helvetica";
-        if (!fonts[key]) { fonts[key] = "F" + fontD.length; fontD.push(`/${fonts[key]} ${add(`<< /Type /Font /Subtype /Type1 /BaseFont /${key} >>`)} 0 R`); } fres = fonts[key]; show = `(${pe(L.t||" ")})`; }
+        fres = baseF(key); show = `(${pe(L.t||" ")})`; }
       c += `q\n${cmM}\nBT\n/${fres} ${f(L.sz)} Tf\n${f(-W/2)} ${f(-H*.3)} Td\n${show} Tj\nET\nQ`;
     }
     else if (L.k === "logo") {
@@ -2730,10 +2762,11 @@ async function artPdf(cutOps, pW, pH, ox, oy, k) {
   }
   if ($("ar_cut").checked) {
     csD.push(`/Spot7 [/Separation /7 /DeviceCMYK ${fn([0,1,0,0])} 0 R]`, `/Spot8 [/Separation /8 /DeviceCMYK ${fn([1,0,0,0])} 0 R]`);
-    layer("Cutter lines (spot 7 / 8)", cutOps.join("\n"), $("ar_cop").checked);
+    layer("Cutter lines (spot 7 / 8)", (dimsOn ? `1 0 0 1 ${f(pad)} ${f(pad)} cm\n` : "") + cutOps.join("\n"), $("ar_cop").checked);
   }
+  if (dimsOn) { const rec = pdfRec(5); drawDimsOn(rec.ctx, 5, 0, 0); layer("Dimensions (proof only — not printed)", rec.ops.join("\n"), false, true); }
   const ref = ocg.join(" ");
-  O[0] = `<< /Type /Catalog /Pages 2 0 R /OCProperties << /OCGs [${ref}] /D << /Order [${ref}] /ON [${ref}] >> >> >>`;
+  O[0] = `<< /Type /Catalog /Pages 2 0 R /OCProperties << /OCGs [${ref}] /D << /Order [${ref}] /ON [${ref}]${npl.length ? ` /AS [<< /Event /Print /Category [/Print] /OCGs [${npl.join(" ")}] >>]` : ""} >> >> >>`;
   O[1] = `<< /Type /Pages /Kids [3 0 R] /Count 1 >>`;
   O[2] = `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${f(pW)} ${f(pH)}] /Resources << /ColorSpace << ${csD.join(" ")} >> /ExtGState << /GSov << /Type /ExtGState /OP true /op true /OPM 1 >> /GSno << /Type /ExtGState /OP false /op false /OPM 0 >> >> /Properties << ${props.join(" ")} >>${fontD.length ? ` /Font << ${fontD.join(" ")} >>` : ""}${xo.length ? ` /XObject << ${xo.join(" ")} >>` : ""} >> /Contents 4 0 R >>`;
   O[3] = `<< /Length ${body.length} >>\nstream\n${body}endstream`;
