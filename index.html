@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Cutter Maker v27 · Palette / spot artwork</title>
+<title>Cutter Maker v28 · Palette / spot artwork</title>
 <style>
 [hidden]{display:none!important}
 body{margin:0;background:#111;color:#eee;font-family:sans-serif;height:100vh;display:flex;flex-direction:column-reverse;overflow:hidden}
@@ -248,6 +248,7 @@ body.pf #dimKey{display:none}
         <button id="downloadPdfArt">PDF — multilayer spot artwork + cutter</button>
         <button id="downloadPdfAnnotated">PDF — colour dimension sheet</button>
         <button id="downloadA4">PDF — A4 formal sheet (client, job no., logo…)</button>
+        <button id="downloadBlueprint">PDF — A4 blueprint sheet (blue &amp; white)</button>
         <button id="downloadSafe">PDF — cutter 1:1 + SAFE ZONE guide (A4 layout)</button>
       </div></div>
   </div>
@@ -262,6 +263,11 @@ body.pf #dimKey{display:none}
       <label class="s2">Cutter ID<input id="jCutter" type="text" autocomplete="off"></label>
       <label class="s2">Date<input id="jDate" type="text" placeholder="today" autocomplete="off"></label>
       <label class="s2">Notes<input id="jNotes" type="text" placeholder="optional" autocomplete="off"></label>
+      <label class="s2">Page title<input id="jTitle" type="text" placeholder="CUTTER PROFILE" autocomplete="off"></label>
+      <label style="grid-column:span 4">Subtitle under page title<input id="jSubtitle" type="text" placeholder="Dimension &amp; specification sheet" autocomplete="off"></label>
+      <label>Header / accent<input id="jBar" type="color" value="#0085ca"></label>
+      <label style="grid-column:span 4">Use colour from loaded palette<select id="jPalette"><option value="">Use header colour above</option></select></label>
+      <label>&nbsp;<button id="jBrandReset" type="button" title="Back to CUTTER PROFILE and the default blue">Reset</button></label>
     </div>
     <div class="logoRow">
       <label class="fbtn" for="jLogo">&#128193; Choose logo file…</label>
@@ -2044,10 +2050,12 @@ document.getElementById("downloadPdfAnnotated").onclick = () => {
 };
 
 /* ───────── Formal A4 sheet: job details, logo, schedule, title block ───────── */
-const JOB_KEY = "cuttermaker.job", job = {client:"",job:"",cutter:"",notes:"",date:"",logo:null,lw:0,lh:0};
+const JOB_KEY = "cuttermaker.job", job = {client:"",job:"",cutter:"",notes:"",date:"",logo:null,lw:0,lh:0,title:"CUTTER PROFILE",subtitle:"Dimension & specification sheet",bar:"#0085ca"};
 try { Object.assign(job, JSON.parse(localStorage.getItem(JOB_KEY)||"{}")); } catch(e) {}
 const jobSave = () => { try { localStorage.setItem(JOB_KEY, JSON.stringify(job)); return true; } catch(e) { return false; } };
 [["jClient","client"],["jJob","job"],["jCutter","cutter"],["jNotes","notes"],["jDate","date"]].forEach(([id,k]) => { $(id).value=job[k]||""; $(id).oninput=()=>{ job[k]=$(id).value; jobSave(); }; });
+[["jTitle","title"],["jSubtitle","subtitle"],["jBar","bar"]].forEach(([id,k]) => { $(id).value = job[k] ?? ""; $(id).oninput = () => { job[k] = $(id).value; jobSave(); }; });
+$("jBrandReset").onclick = () => { job.title = "CUTTER PROFILE"; job.subtitle = "Dimension & specification sheet"; job.bar = "#0085ca"; $("jTitle").value = job.title; $("jSubtitle").value = job.subtitle; $("jBar").value = job.bar; jobSave(); };
 function logoUI() {
   const im=$("jLogoPrev"); im.hidden=!job.logo; if (job.logo) im.src=job.logo; $("jLogoX").hidden=!job.logo;
   $("jLogoName").textContent = job.logo ? (job.logoName||"Logo loaded") : "No logo selected (PNG, JPG, SVG or PDF · drop a file here too)";
@@ -2138,8 +2146,13 @@ async function prepareLogo() {
 const exportA4 = async () => {
   const LG = job.logo ? await prepareLogo().catch(()=>null) : null;
   const m=72/25.4, f=v=>(+v).toFixed(3), d2=v=>(Math.round(v*100)/100).toFixed(2);
-  const PW=297, PH=210, M=8, pW=PW*m, pH=PH*m, sh=S.placed, BC="#0085ca";
-  const NAVY="0.07 0.12 0.22", GREY="0.42 0.46 0.52", RULE="0.80 0.82 0.86";
+  const PW=297, PH=210, M=8, pW=PW*m, pH=PH*m, sh=S.placed;
+  const blueprint = a4Mode === "blueprint";
+  const paletteHex = (document.getElementById("jPalette")?.value || "");
+  const BC = blueprint ? "#FFFFFF" : (paletteHex || job.bar || "#0085ca");
+  const NAVY = blueprint ? "1 1 1" : "0.07 0.12 0.22";
+  const GREY = blueprint ? "0.78 0.88 1" : "0.42 0.46 0.52";
+  const RULE = blueprint ? "0.55 0.76 1" : "0.80 0.82 0.86";
   const hexs=(h,k)=>[1,3,5].map(i=>(Math.min(255,parseInt(h.substr(i,2),16)*(k||1))/255).toFixed(3)).join(" "), hex=h=>hexs(h,1), deep=h=>hexs(h,0.62);
   const WD={" ":278,".":278,":":278,",":278,"(":333,")":333,"-":333,"/":278,"x":500,"m":833,"R":722,"T":611,"L":556,"B":722,"O":778,"u":556,"t":278,"e":556,"r":333,"P":667,"o":556,"f":278,"i":222,"l":222,"S":667,"h":556,"a":556,"p":556,"M":833,"E":667,"A":667,"U":722,"K":667,"Y":667,"N":722,"C":722,"D":722,"G":778,"I":278,"W":944,"H":722,"n":556,"s":500,"c":500,"d":556,"g":556,"k":500,"b":556,"y":500,"w":722,"v":500,"z":500,"j":222,"q":556,"·":278,"Ø":778,"×":584};
   const tw=(s,sz,b)=>{ let t=0; for (const c of s) t+=(WD[c]||556); return t*sz/1000*(b?1.06:1); };
@@ -2181,12 +2194,17 @@ const exportA4 = async () => {
     else ellp(gx(s.x+s.w/2),gy(s.y+s.h/2),s.w/2*K,s.h/2*K,p);
   };
 
+  // Paint the entire A4 page first. This belongs in exportA4 (not the other PDF exporter).
+  if (blueprint) {
+    ops.push("q 0.035 0.18 0.39 rg 0 0 "+f(pW)+" "+f(pH)+" re f Q");
+  }
+
   /* queued labels, placed without overlaps */
   const Q=[], obst=[], late=[];
   const pill=(str,cx,cy,hx,rot,sz)=>{
     const tww=tw(str,sz,true), w=tww+5, h=sz*1.7, bw=rot?h:w, bh=rot?w:h, c=hex(hx);
-    ops.push("q /G9 gs 1 1 1 rg"); rrp(cx-bw/2,cy-bh/2,bw,bh,2,"f"); ops.push("Q");
-    ops.push(`${c} RG 0.7 w`); rrp(cx-bw/2,cy-bh/2,bw,bh,2,"S");
+    ops.push(blueprint ? "q /G9 gs 0.035 0.18 0.39 rg" : "q /G9 gs 1 1 1 rg"); rrp(cx-bw/2,cy-bh/2,bw,bh,2,"f"); ops.push("Q");
+    ops.push(`${blueprint ? "1 1 1" : c} RG 0.7 w`); rrp(cx-bw/2,cy-bh/2,bw,bh,2,"S");
     ops.push(`${NAVY} rg BT /F2 ${f(sz)} Tf `+(rot?`0 1 -1 0 ${f(cx+sz*0.35)} ${f(pH-cy-tww/2)} Tm`:`1 0 0 1 ${f(cx-tww/2)} ${f(pH-cy-sz*0.35)} Tm`)+` (${esc(str)}) Tj ET`);
   };
   const arr=(tx,ty,dx,dy,c,L,W)=>ops.push(`${c} rg 1 1 1 RG 0.4 w ${Pp(tx,ty)} m ${Pp(tx-dx*L-dy*W,ty-dy*L+dx*W)} l ${Pp(tx-dx*L+dy*W,ty-dy*L-dx*W)} l h B`);
@@ -2230,14 +2248,15 @@ const exportA4 = async () => {
   /* 1 ▸ frame, header */
   ops.push(`${NAVY} RG 0.9 w`); rect(M*m,M*m,(PW-2*M)*m,(PH-2*M)*m,"S");
   line((M)*m,HY*m,(PW-M)*m,HY*m,NAVY,0.9);
-  ops.push(`${hex(BC)} rg`); rect(M*m,HY*m,(PW-2*M)*m,1.1*m,"f");
+  ops.push(`${hex(blueprint ? "#FFFFFF" : (paletteHex || job.bar || BC))} rg`); rect(M*m,HY*m,(PW-2*M)*m,1.1*m,"f");
   let tx=M+5;
   if (LG) {
     const bw=48, bh=14, ar=LG.w/LG.h; let lw=bw, lh=bw/ar; if (lh>bh) { lh=bh; lw=bh*ar; }
     ops.push(`q ${f(lw*m)} 0 0 ${f(lh*m)} ${f((M+5)*m)} ${f(pH-(M+3+(bh-lh)/2+lh)*m)} cm /Im1 Do Q`); tx=M+5+lw+6;
   }
-  txt("CUTTER PROFILE",tx*m,(M+10.2)*m,17,NAVY,true);
-  txt("Dimension & specification sheet",tx*m,(M+15.6)*m,8,GREY,false);
+  const TT=(job.title||"").trim()||"CUTTER PROFILE";
+  txt(TT,tx*m,(M+10.2)*m,fitSz(TT,17,(PW-M-62-4-tx)*m,true),NAVY,true);
+  txt((job.subtitle ?? "Dimension & specification sheet"),tx*m,(M+15.6)*m,fitSz((job.subtitle ?? "Dimension & specification sheet"),8,Math.max(10,(PW-M-62-4-tx)*m),false),blueprint?"0.72 0.86 1":GREY,false);
   const idv=job.cutter||"—", bx=PW-M-62;
   ops.push(`${RULE} RG 0.6 w`); rect(bx*m,(M+3)*m,58*m,13.5*m,"S");
   txt("CUTTER ID",(bx+3)*m,(M+7.2)*m,6,GREY,true);
@@ -2245,17 +2264,17 @@ const exportA4 = async () => {
 
   /* 2 ▸ drawing */
   line(rx0*m,HY*m,rx0*m,(PH-M)*m,NAVY,0.9);
-  ops.push("0.975 0.98 0.985 rg"); shapePath(P0,"f");
+  ops.push(blueprint ? "0.035 0.18 0.39 rg" : "0.975 0.98 0.985 rg"); shapePath(P0,"f");
   sh.forEach((s,i)=>{
-    const hx=gOf[i].hex;
+    const hx=blueprint ? "#FFFFFF" : gOf[i].hex;
     if (s.type==="dash") { const q=fitDash(s); ops.push(`${deep(hx)} RG 1.6 w 0 J ${!s.solid&&q.tie>0?`[${f(q.cut*K)} ${f(q.tie*K)}] 0 d `:""}${Pp(gx(s.x),gy(s.y))} m ${Pp(gx(s.x+s.w),gy(s.y+s.h))} l S [] 0 d`); }
     else { if (!(s.type==="path"&&!s.closed)) { ops.push(`q /G5 gs ${hex(hx)} rg`); shapePath(s,"f"); ops.push("Q"); } ops.push(`${deep(hx)} RG 0.9 w`); { if (pieceMode(s)) pdfEdgePieces(ops,Pp,s,gx,gy,K); else { const dp=dashPdf(s,K); if (dp) ops.push(dp); shapePath(s,"S"); if (dp) ops.push("[] 0 d"); } } }
   });
   ops.push(`${hex(BC)} RG 1.4 w`); { if (pieceMode(P0)) pdfEdgePieces(ops,Pp,P0,gx,gy,K); else { const dp=dashPdf(P0,K); if (dp) ops.push(dp); shapePath(P0,"S"); if (dp) ops.push("[] 0 d"); } }
-  for (const g of computeGaps()) { if (g.ax===0) dimH(gx(g.from),gx(g.to),gy(g.mid),d2(g.g),"#9aa3af",5,0.4,"#5b6470",3); else dimV(gy(g.from),gy(g.to),gx(g.mid),d2(g.g),"#9aa3af",5,0.4,"#5b6470",3); }
+  for (const g of computeGaps()) { if (g.ax===0) dimH(gx(g.from),gx(g.to),gy(g.mid),d2(g.g),blueprint?"#FFFFFF":"#9aa3af",5,0.4,blueprint?"#B8D9FF":"#5b6470",3); else dimV(gy(g.from),gy(g.to),gx(g.mid),d2(g.g),blueprint?"#FFFFFF":"#9aa3af",5,0.4,blueprint?"#B8D9FF":"#5b6470",3); }
   const corners=s=>[["tl",s.x,s.y,1,1],["tr",s.x+s.w,s.y,-1,1],["br",s.x+s.w,s.y+s.h,-1,-1],["bl",s.x,s.y+s.h,1,-1]];
   sh.forEach((s,i)=>{
-    const g=gOf[i], hx=g.hex, first=g.idx[0]===i, cxm=s.x+s.w/2, cym=s.y+s.h/2, round=s.type==="circle"||s.type==="oval";
+    const g=gOf[i], hx=blueprint ? "#FFFFFF" : g.hex, first=g.idx[0]===i, cxm=s.x+s.w/2, cym=s.y+s.h/2, round=s.type==="circle"||s.type==="oval";
     if (first) {
       if (s.type==="dash") { const q=fitDash(s), len=s.orient==="h"?s.w:s.h, str=`${d2(len)}   cut ${d2(q.cut)} / tie ${d2(q.tie)}`;
         if (s.orient==="h") dimH(gx(s.x),gx(s.x+s.w),gy(s.y)-3*m,str,hx,5.6); else dimV(gy(s.y),gy(s.y+s.h),gx(s.x)-3*m,str,hx,5.6); }
@@ -2363,8 +2382,23 @@ const exportA4 = async () => {
 };
 
 var a4Mode = "a4";
-const a4Open = mode => { a4Mode = mode; $("a4Title").textContent = mode === "safe" ? "Cutter at 1:1 with SAFE ZONE guide" : "A4 formal sheet"; $("jLogoMsg").textContent=""; $("a4Modal").hidden=false; $("jClient").focus(); };
+const refreshJobPalette = () => {
+  const sel = $("jPalette"); if (!sel) return;
+  const keep = sel.value;
+  sel.innerHTML = '<option value="">Use header colour above</option>';
+  const entries = [];
+  const add = (name, hex) => { if (typeof hex === "string" && /^#[0-9a-f]{6}$/i.test(hex)) entries.push({name:String(name||hex),hex}); };
+  try { (PALS||[]).forEach(p => {
+    const items = p.colors || p.entries || p.swatches || p.data || [];
+    if (Array.isArray(items)) items.forEach(c => add(c.name || c.label || c.code, c.hex || c.rgbHex || c.color || c.screen));
+  }); } catch(e) {}
+  const unique = [...new Map(entries.map(e=>[e.hex.toLowerCase(),e])).values()];
+  unique.forEach(e => { const o=document.createElement("option"); o.value=e.hex; o.textContent=e.name+" — "+e.hex; sel.appendChild(o); });
+  if ([...sel.options].some(o=>o.value===keep)) sel.value=keep;
+};
+const a4Open = mode => { a4Mode = mode; refreshJobPalette(); $("a4Title").textContent = mode === "safe" ? "Cutter at 1:1 with SAFE ZONE guide" : mode === "blueprint" ? "A4 blueprint sheet" : "A4 formal sheet"; $("jLogoMsg").textContent=""; $("a4Modal").hidden=false; $("jClient").focus(); };
 $("downloadA4").onclick = () => a4Open("a4");
+$("downloadBlueprint").onclick = () => a4Open("blueprint");
 $("downloadSafe").onclick = () => a4Open("safe");
 $("a4Cancel").onclick = () => { $("a4Modal").hidden=true; };
 $("a4Go").onclick = () => { $("a4Modal").hidden=true; if (a4Mode === "safe") { cutterPdf("safe"); return; } exportA4().catch(err=>alert("Export failed: "+(err&&err.message||err))); };
@@ -2842,12 +2876,13 @@ async function safeSheet(cutOps, safeOps, CB, margin, k) {
   const line = (x1,y1,x2,y2,rgb,w) => ops.push(`${rgb} RG ${w} w ${Pp(x1,y1)} m ${Pp(x2,y2)} l S`);
   // frame + header
   ops.push(`${NAVY} RG 0.9 w`); rect(M*m,M*m,(PW-2*M)*m,(PH-2*M)*m,"S");
-  line(M*m,HY*m,(PW-M)*m,HY*m,NAVY,.9); ops.push(`${hex(BC)} rg`); rect(M*m,HY*m,(PW-2*M)*m,1.1*m,"f");
+  line(M*m,HY*m,(PW-M)*m,HY*m,NAVY,.9); ops.push(`${hex(job.bar || BC)} rg`); rect(M*m,HY*m,(PW-2*M)*m,1.1*m,"f");
   let tx = M+5;
   if (LG) { const bw = 48, bh = 14, ar = LG.w/LG.h; let lw = bw, lh = bw/ar; if (lh > bh) { lh = bh; lw = bh*ar; }
     ops.push(`q ${f(lw*m)} 0 0 ${f(lh*m)} ${f((M+5)*m)} ${f(pH-(M+3+(bh-lh)/2+lh)*m)} cm /Im1 Do Q`); tx = M+5+lw+6; }
-  txt("CUTTER PROFILE", tx*m, (M+10.2)*m, 17, NAVY, true);
-  txt(`Cutter guide with SAFE ZONE  ·  actual size (1:1)`, tx*m, (M+15.6)*m, 8, GREY, false);
+  const TT = (job.title || "").trim() || "CUTTER PROFILE";
+  txt(TT, tx*m, (M+10.2)*m, fitSz(TT, 17, (PW-M-62-4-tx)*m, true), NAVY, true);
+  txt((job.subtitle ?? "Cutter guide with SAFE ZONE  ·  actual size (1:1)"), tx*m, (M+15.6)*m, fitSz((job.subtitle ?? "Cutter guide with SAFE ZONE  ·  actual size (1:1)"),8,Math.max(10,(PW-M-62-4-tx)*m),false), GREY, false);
   const idv = job.cutter || "—", bx = PW-M-62; ops.push(`${RULE} RG 0.6 w`); rect(bx*m,(M+3)*m,58*m,13.5*m,"S");
   txt("CUTTER ID",(bx+3)*m,(M+7.2)*m,6,GREY,true); txt(idv,(bx+3)*m,(M+14)*m,fitSz(idv,14,52*m,true),NAVY,true);
   line(rx0*m,HY*m,rx0*m,(PH-M)*m,NAVY,.9);
