@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Cutter Maker v26 · Palette / spot artwork</title>
+<title>Cutter Maker v27 · Palette / spot artwork</title>
 <style>
 [hidden]{display:none!important}
 body{margin:0;background:#111;color:#eee;font-family:sans-serif;height:100vh;display:flex;flex-direction:column-reverse;overflow:hidden}
@@ -2824,7 +2824,7 @@ function buildSafe(ops, P, ox, oy, k, d) {   // same coordinate system as the cu
 }
 async function safeSheet(cutOps, safeOps, CB, margin, k) {
   const LG = job.logo ? await prepareLogo().catch(() => null) : null;
-  const m = k, f = v => (+v).toFixed(3), d2 = v => (Math.round(v*100)/100).toFixed(2), M = 8, RW = 92, pad = 8, HY = M+20, BC = "#0085ca";
+  const m = k, f = v => (+v).toFixed(3), d2 = v => (Math.round(v*100)/100).toFixed(2), M = 8, RW = 92, pad = 12, HY = M+20, BC = "#0085ca";
   const NAVY = "0.07 0.12 0.22", GREY = "0.42 0.46 0.52", RULE = "0.80 0.82 0.86";
   const hex = h => [1,3,5].map(i => (parseInt(h.substr(i,2),16)/255).toFixed(3)).join(" ");
   const tw = (s,sz,b) => { mctx.font = `${b ? "bold " : ""}100px Arial`; return mctx.measureText(s).width*sz/100; };
@@ -2853,6 +2853,16 @@ async function safeSheet(cutOps, safeOps, CB, margin, k) {
   line(rx0*m,HY*m,rx0*m,(PH-M)*m,NAVY,.9);
   // the cutter + safe zone at true size
   ops.push(`q 1 0 0 1 ${f((dxm-margin)*m)} ${f((PH-dym-CB.h-margin)*m)} cm`); cutOps.forEach(o => ops.push(o)); safeOps.forEach(o => ops.push(o)); ops.push("Q");
+  // overall profile dimensions: horizontal (top) and vertical (left), true values in mm
+  { const bc = hex(BC), pre = S.profileType === "circle" ? "Ø" : "", px = v => (dxm+v-CB.x0)*m, py = v => (dym+v-CB.y0)*m;
+    const head = (x,y,dx,dy) => { const L = 2.2*m, W = .8*m; ops.push(`${bc} rg ${Pp(x,y)} m ${Pp(x-dx*L-dy*W,y-dy*L+dx*W)} l ${Pp(x-dx*L+dy*W,y-dy*L-dx*W)} l h f`); };
+    const label = (str,cx,cy,rot) => { const sz = 7.5, tww = tw(str,sz,true), w = tww+8, h = sz*1.7, bw = rot ? h : w, bh = rot ? w : h;
+      ops.push(`1 1 1 rg ${bc} RG 0.7 w ${f(cx-bw/2)} ${f(pH-cy-bh/2)} ${f(bw)} ${f(bh)} re B`);
+      ops.push(`${NAVY} rg BT /F2 ${f(sz)} Tf ` + (rot ? `0 1 -1 0 ${f(cx+sz*.35)} ${f(pH-cy-tww/2)} Tm` : `1 0 0 1 ${f(cx-tww/2)} ${f(pH-cy-sz*.35)} Tm`) + ` (${esc(str)}) Tj ET`); };
+    const yD = (dym-6)*m, xD = (dxm-6)*m, x0 = px(0), x1 = px(S.mw), y0 = py(0), y1 = py(S.mh);
+    line(x0,y0-1*m,x0,yD-1.5*m,bc,.35); line(x1,y0-1*m,x1,yD-1.5*m,bc,.35); line(x0,yD,x1,yD,bc,.8); head(x0,yD,-1,0); head(x1,yD,1,0);
+    line(x0-1*m,y0,xD-1.5*m,y0,bc,.35); line(x0-1*m,y1,xD-1.5*m,y1,bc,.35); line(xD,y0,xD,y1,bc,.8); head(xD,y0,0,-1); head(xD,y1,0,1);
+    label(`${pre}${d2(S.mw)} mm`,(x0+x1)/2,yD,false); label(`${pre}${d2(S.mh)} mm`,xD,(y0+y1)/2,true); }
   txt("ACTUAL SIZE — PRINT AT 100% (DO NOT SCALE)", (dx0+1)*m, (PH-M-2)*m, 5.5, GREY, true);
   const sbx = dx0+dW-52; line(sbx*m,(PH-M-3.2)*m,(sbx+50)*m,(PH-M-3.2)*m,NAVY,.8);
   for (let i = 0; i <= 5; i++) line((sbx+i*10)*m,(PH-M-4.4)*m,(sbx+i*10)*m,(PH-M-3.2)*m,NAVY,.8);
