@@ -250,6 +250,7 @@ body.pf #dimKey{display:none}
         <button id="downloadA4">PDF — A4 formal sheet (client, job no., logo…)</button>
         <button id="downloadBlueprint">PDF — A4 blueprint sheet (blue &amp; white)</button>
         <button id="downloadSafe">PDF — cutter 1:1 + SAFE ZONE guide (A4 layout)</button>
+        <button id="downloadLayersKey">PDF — All Design Layers + Colour Key</button>
       </div></div>
   </div>
 </div>
@@ -1673,7 +1674,7 @@ const cutterPdf = (multi) => {
   function coord(x, y) { return `${fx(x)} ${fy(y)}`; }
 
   const ops = [];
-  const setSpot = name => ops.push(`/Spot${String(name)==='8'?'8':'7'} CS 1 SCN`);
+  const setSpot = name => ops.push(`/Spot${String(name).trim()==='8'?'8':'7'} CS 1 SCN`);
   const dashSpotOf = d => d && d.spot ? d.spot : 7;
   const setDashSpot = d => setSpot(dashSpotOf(d));
   ops.push('0.5 w');       // line width
@@ -1747,7 +1748,7 @@ const cutterPdf = (multi) => {
     if (dpx) { ops.push('[] 0 d'); setSpot(r.solidSpot||7); }
   }
 
-  if (multi === 'safe') { const sf = []; buildSafe(sf, coord, ox, oy, mm2pt, SAFE_MM); safeSheet(ops, sf, CB, margin, mm2pt).catch(e => alert('PDF export failed: ' + e.message)); return; }
+  if (multi === 'safe' || multi === 'layers') { const sf = []; buildSafe(sf, coord, ox, oy, mm2pt, SAFE_MM); (async()=>{ const artImage = multi === 'layers' ? await makeLayersPreview(CB) : null; await safeSheet(ops, sf, CB, margin, mm2pt, multi === 'layers', artImage); })().catch(e => alert('PDF export failed: ' + e.message)); return; }
   if (multi) { artPdf(ops, pW, pH, ox, oy, mm2pt).catch(e => alert('PDF export failed: ' + e.message)); return; }
   // Build PDF with byte-accurate xref
   const enc = new TextEncoder();
@@ -2396,12 +2397,13 @@ const refreshJobPalette = () => {
   unique.forEach(e => { const o=document.createElement("option"); o.value=e.hex; o.textContent=e.name+" — "+e.hex; sel.appendChild(o); });
   if ([...sel.options].some(o=>o.value===keep)) sel.value=keep;
 };
-const a4Open = mode => { a4Mode = mode; refreshJobPalette(); $("a4Title").textContent = mode === "safe" ? "Cutter at 1:1 with SAFE ZONE guide" : mode === "blueprint" ? "A4 blueprint sheet" : "A4 formal sheet"; $("jLogoMsg").textContent=""; $("a4Modal").hidden=false; $("jClient").focus(); };
+const a4Open = mode => { a4Mode = mode; refreshJobPalette(); $("a4Title").textContent = mode === "safe" ? "Cutter at 1:1 with SAFE ZONE guide" : mode === "layers" ? "All design layers + colour key" : mode === "blueprint" ? "A4 blueprint sheet" : "A4 formal sheet"; $("jLogoMsg").textContent=""; $("a4Modal").hidden=false; $("jClient").focus(); };
 $("downloadA4").onclick = () => a4Open("a4");
 $("downloadBlueprint").onclick = () => a4Open("blueprint");
 $("downloadSafe").onclick = () => a4Open("safe");
+$("downloadLayersKey").onclick = () => a4Open("layers");
 $("a4Cancel").onclick = () => { $("a4Modal").hidden=true; };
-$("a4Go").onclick = () => { $("a4Modal").hidden=true; if (a4Mode === "safe") { cutterPdf("safe"); return; } exportA4().catch(err=>alert("Export failed: "+(err&&err.message||err))); };
+$("a4Go").onclick = () => { $("a4Modal").hidden=true; if (a4Mode === "safe" || a4Mode === "layers") { cutterPdf(a4Mode); return; } exportA4().catch(err=>alert("Export failed: "+(err&&err.message||err))); };
 $("a4Modal").addEventListener("keydown", e => { if (e.key==="Escape") $("a4Modal").hidden=true; });
 $("a4Modal").addEventListener("mousedown", e => { if (e.target===$("a4Modal")) $("a4Modal").hidden=true; });
 /* ───────── Artwork layers: Pantone + spot colour libraries (merged from PantoneMaker V10) ───────── */
@@ -2856,7 +2858,38 @@ function buildSafe(ops, P, ox, oy, k, d) {   // same coordinate system as the cu
   }
   ops.push("[] 0 d");
 }
-async function safeSheet(cutOps, safeOps, CB, margin, k) {
+async function makeLayersPreview(CB) {
+  // Render all enabled artwork layers into a high-resolution, self-contained image for the SAFE ZONE sheet.
+  const scale = 5, cv = document.createElement("canvas");
+  cv.width = Math.max(1, Math.ceil(CB.w*scale)); cv.height = Math.max(1, Math.ceil(CB.h*scale));
+  const ctx = cv.getContext("2d", {alpha:false});
+  ctx.fillStyle = "#ffffff"; ctx.fillRect(0,0,cv.width,cv.height);
+  const X = v => (v-CB.x0)*scale, Y = v => (v-CB.y0)*scale;
+  for (const L of S.art) {
+    if (L.on === false) continue;
+    const b = artBox(L), hx = L.k === "eye" ? "#000000" : (L.col.split("|")[1] || "#000000");
+    ctx.save(); ctx.globalAlpha = Math.max(.03, Math.min(1,(L.d||100)/100)); ctx.fillStyle = hx;
+    if (L.k === "bg") { ctx.fillStyle = hx; ctx.fillRect(0,0,cv.width,cv.height); ctx.restore(); continue; }
+    const cx = X(b.x+b.w/2), cy = Y(b.y+b.h/2), w=b.w*scale, h=b.h*scale;
+    if (L.k === "text" || L.k === "logo") {
+      ctx.translate(cx,cy); ctx.rotate((L.rot||0)*Math.PI/180); ctx.scale(L.mir==="h"?-1:1,L.mir==="v"?-1:1);
+      if (L.k === "text") { ctx.font = fontStr(L, L.sz*PT*scale); ctx.textAlign="center"; ctx.textBaseline="alphabetic"; ctx.fillText(L.t||" ",0,h*.3); }
+      else { const I=IMGS[L.img]; if (I) { const im=logoCv(L); if (im) ctx.drawImage(im,-w/2,-h/2,w,h); } }
+    } else if (L.k === "rect" && L.r>0) {
+      const r=Math.min(L.r*scale,w/2,h/2); ctx.beginPath(); ctx.roundRect(X(b.x),Y(b.y),w,h,r); ctx.fill();
+    } else ctx.fillRect(X(b.x),Y(b.y),w,h);
+    ctx.restore();
+  }
+  // Store a plain RGB image stream instead of JPEG/DCT. This avoids PDF readers
+  // silently dropping the artwork XObject on some mobile PDF viewers.
+  const rgba = ctx.getImageData(0, 0, cv.width, cv.height).data;
+  const bytes = new Uint8Array(cv.width * cv.height * 3);
+  for (let si = 0, di = 0; si < rgba.length; si += 4) {
+    bytes[di++] = rgba[si]; bytes[di++] = rgba[si + 1]; bytes[di++] = rgba[si + 2];
+  }
+  return {bytes,w:cv.width,h:cv.height,rawRGB:true};
+}
+async function safeSheet(cutOps, safeOps, CB, margin, k, showAllLayers = false, artImage = null) {
   const LG = job.logo ? await prepareLogo().catch(() => null) : null;
   const m = k, f = v => (+v).toFixed(3), d2 = v => (Math.round(v*100)/100).toFixed(2), M = 8, RW = 92, pad = 12, HY = M+20, BC = "#0085ca";
   const NAVY = "0.07 0.12 0.22", GREY = "0.42 0.46 0.52", RULE = "0.80 0.82 0.86";
@@ -2880,12 +2913,15 @@ async function safeSheet(cutOps, safeOps, CB, margin, k) {
   let tx = M+5;
   if (LG) { const bw = 48, bh = 14, ar = LG.w/LG.h; let lw = bw, lh = bw/ar; if (lh > bh) { lh = bh; lw = bh*ar; }
     ops.push(`q ${f(lw*m)} 0 0 ${f(lh*m)} ${f((M+5)*m)} ${f(pH-(M+3+(bh-lh)/2+lh)*m)} cm /Im1 Do Q`); tx = M+5+lw+6; }
-  const TT = (job.title || "").trim() || "CUTTER PROFILE";
+  const TT = showAllLayers ? "ALL DESIGN LAYERS + COLOUR KEY" : ((job.title || "").trim() || "CUTTER PROFILE");
   txt(TT, tx*m, (M+10.2)*m, fitSz(TT, 17, (PW-M-62-4-tx)*m, true), NAVY, true);
-  txt((job.subtitle ?? "Cutter guide with SAFE ZONE  ·  actual size (1:1)"), tx*m, (M+15.6)*m, fitSz((job.subtitle ?? "Cutter guide with SAFE ZONE  ·  actual size (1:1)"),8,Math.max(10,(PW-M-62-4-tx)*m),false), GREY, false);
+  const subLine = showAllLayers ? (job.subtitle ?? "All visible design layers, cutter profile and SAFE ZONE · actual size (1:1)") : (job.subtitle ?? "Cutter guide with SAFE ZONE  ·  actual size (1:1)");
+  txt(subLine, tx*m, (M+15.6)*m, fitSz(subLine,8,Math.max(10,(PW-M-62-4-tx)*m),false), GREY, false);
   const idv = job.cutter || "—", bx = PW-M-62; ops.push(`${RULE} RG 0.6 w`); rect(bx*m,(M+3)*m,58*m,13.5*m,"S");
   txt("CUTTER ID",(bx+3)*m,(M+7.2)*m,6,GREY,true); txt(idv,(bx+3)*m,(M+14)*m,fitSz(idv,14,52*m,true),NAVY,true);
   line(rx0*m,HY*m,rx0*m,(PH-M)*m,NAVY,.9);
+  // Artwork preview sits beneath the vector cutter profile and SAFE ZONE guide.
+  if (showAllLayers && artImage) ops.push(`q ${f(CB.w*m)} 0 0 ${f(CB.h*m)} ${f(dxm*m)} ${f(pH-(dym+CB.h)*m)} cm /ImArt Do Q`);
   // the cutter + safe zone at true size
   ops.push(`q 1 0 0 1 ${f((dxm-margin)*m)} ${f((PH-dym-CB.h-margin)*m)} cm`); cutOps.forEach(o => ops.push(o)); safeOps.forEach(o => ops.push(o)); ops.push("Q");
   // overall profile dimensions: horizontal (top) and vertical (left), true values in mm
@@ -2910,7 +2946,7 @@ async function safeSheet(cutOps, safeOps, CB, margin, k) {
   const seen = new Set(["7","8",SAFE_NAME]);
   for (const L of S.art) { if (L.on === false) continue; const [nm0,hx,cm] = L.col.split("|"); if (seen.has(nm0)) continue; seen.add(nm0); spots.push({n:nm0, cs:"KS"+spots.length, alt:altCmyk(nm0,hx,cm), d:"artwork colour"}); }
   const nT = job.notes ? 9 : 8, tbH = nT*7, sY0 = HY+5, sY1 = PH-M-tbH-4, sx0 = rx0+4, sW = RW-8, sx1 = sY0+8;
-  txt("SPOT COLOUR KEY", sx0*m, (sY0+3.6)*m, 8.5, NAVY, true);
+  txt(showAllLayers ? "DESIGN LAYERS + COLOUR KEY" : "SPOT COLOUR KEY", sx0*m, (sY0+3.6)*m, 8.5, NAVY, true);
   const rh = Math.min(11, Math.max(6, (sY1-sx1)/spots.length)), nShow = Math.max(1, Math.min(spots.length, Math.floor((sY1-sx1)/rh)));
   spots.slice(0,nShow).forEach((s,i) => { const y = sx1+i*rh, cy = y+rh/2;
     if (i%2) { ops.push("0.955 0.96 0.97 rg"); rect(sx0*m,y*m,sW*m,rh*m,"f"); }
@@ -2931,15 +2967,23 @@ async function safeSheet(cutOps, safeOps, CB, margin, k) {
   const content = ops.join("\n"), enc = new TextEncoder(), chunks = [], offs = []; let pos = 0;
   const put = b => { const u = typeof b === "string" ? enc.encode(b) : b; chunks.push(u); pos += u.length; };
   const obj = (n,body,bytes) => { offs[n] = pos; put(`${n} 0 obj\n${body}`); if (bytes) { put("\nstream\n"); put(bytes); put("\nendstream"); } put("\nendobj\n"); };
-  let nx = 7+(LG ? 1 : 0)+(LG && LG.alpha ? 1 : 0); const csD = spots.map(s => `/${s.cs} [/Separation ${pdfNm(s.n)} /DeviceCMYK ${nx++} 0 R]`), nObj = nx-1;
+  // Allocate every PDF object exactly once. The artwork image and spot-colour
+  // tint functions must never share object numbers (the previous collision
+  // caused the artwork to disappear and spot colours to render incorrectly).
+  const artImageObj = 7 + (LG ? 1 : 0) + (LG && LG.alpha ? 1 : 0);
+  const hasArtImage = !!(showAllLayers && artImage);
+  const spotFunctionStart = artImageObj + (hasArtImage ? 1 : 0);
+  const csD = spots.map((s, i) => `/${s.cs} [/Separation ${pdfNm(s.n)} /DeviceCMYK ${spotFunctionStart+i} 0 R]`);
+  const nObj = spotFunctionStart + spots.length - 1;
   put("%PDF-1.4\n%\xE2\xE3\xCF\xD3\n");
   obj(1,"<< /Type /Catalog /Pages 2 0 R >>"); obj(2,"<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
-  obj(3,`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${f(pW)} ${f(pH)}] /Contents 4 0 R /Resources << /Font << /F1 5 0 R /F2 6 0 R >> /ColorSpace << ${csD.join(" ")} >> ${LG ? "/XObject << /Im1 7 0 R >> " : ""}>> >>`);
+  obj(3,`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${f(pW)} ${f(pH)}] /Contents 4 0 R /Resources << /Font << /F1 5 0 R /F2 6 0 R >> /ColorSpace << ${csD.join(" ")} >> ${(LG || (showAllLayers && artImage)) ? "/XObject << "+(LG?"/Im1 7 0 R ":"")+(showAllLayers && artImage?`/ImArt ${7+(LG?1:0)+(LG && LG.alpha?1:0)} 0 R `:"")+" >> " : ""}>> >>`);
   obj(4,`<< /Length ${enc.encode(content).length} >>`,enc.encode(content));
   obj(5,"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>"); obj(6,"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>");
   if (LG) obj(7,`<< /Type /XObject /Subtype /Image /Width ${LG.w} /Height ${LG.h} /ColorSpace /${LG.cs} /BitsPerComponent 8 ${LG.filter ? "/Filter /"+LG.filter+" " : ""}${LG.alpha ? "/SMask 8 0 R " : ""}/Length ${LG.data.length} >>`,LG.data);
   if (LG && LG.alpha) obj(8,`<< /Type /XObject /Subtype /Image /Width ${LG.w} /Height ${LG.h} /ColorSpace /DeviceGray /BitsPerComponent 8 ${LG.alpha.filter ? "/Filter /"+LG.alpha.filter+" " : ""}/Length ${LG.alpha.data.length} >>`,LG.alpha.data);
-  spots.forEach((s,i) => obj(7+(LG ? 1 : 0)+(LG && LG.alpha ? 1 : 0)+i, `<< /FunctionType 2 /Domain [0 1] /Range [0 1 0 1 0 1 0 1] /C0 [0 0 0 0] /C1 [${s.alt.join(" ")}] /N 1 >>`));
+  if (hasArtImage) obj(artImageObj, `<< /Type /XObject /Subtype /Image /Width ${artImage.w} /Height ${artImage.h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Length ${artImage.bytes.length} >>`, artImage.bytes);
+  spots.forEach((s,i) => obj(spotFunctionStart+i, `<< /FunctionType 2 /Domain [0 1] /Range [0 1 0 1 0 1 0 1] /C0 [0 0 0 0] /C1 [${s.alt.join(" ")}] /N 1 >>`));
   const xr = pos; put(`xref\n0 ${nObj+1}\n0000000000 65535 f \n`); for (let i = 1; i <= nObj; i++) put(String(offs[i]).padStart(10,"0")+" 00000 n \n");
   put(`trailer\n<< /Size ${nObj+1} /Root 1 0 R >>\nstartxref\n${xr}\n%%EOF`);
   const url = URL.createObjectURL(new Blob(chunks,{type:"application/pdf"})), a = document.createElement("a");
