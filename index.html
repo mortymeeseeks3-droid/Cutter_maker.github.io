@@ -2477,7 +2477,7 @@ function drawArt(px) {
     x.save(); x.globalAlpha = Math.max(.03, (L.d||100)/100); x.fillStyle = L.k === "eye" ? "#000" : h; x.fontKerning = "none";
     if (L.op) x.globalCompositeOperation = "multiply";
     if (L.k === "text") { txf(L,b); x.font = fontStr(L, L.sz*PT); x.textBaseline = "alphabetic"; x.fillText(L.t||" ", -b.w/2, b.h*.3); }
-    else if (L.k === "logo") { const cv = logoCv(L); if (cv) { txf(L,b); x.drawImage(cv, -b.w/2, -b.h/2, b.w, b.h); } }
+    else if (L.k === "logo") { txf(L,b); drawLogo(x, L, b.w, b.h); }
     else if (L.k === "rect" && L.r > 0) x.fill(new Path2D(rectD(b.x,b.y,b.w,b.h,{tl:L.r,tr:L.r,br:L.r,bl:L.r})));
     else x.fillRect(b.x, b.y, b.w, b.h);
     x.restore();
@@ -2700,8 +2700,124 @@ async function fontScan(files) {
 $("ar_fb").onclick = () => $("ar_ff").click(); $("ar_fi").onclick = () => $("ar_fl").click();
 $("ar_ff").onchange = $("ar_fl").onchange = async e => { const fs = [...e.target.files]; e.target.value = ""; await fontScan(fs); };
 
+
+/* ── PDF logos as true vector art: paths are read from the page's operator list and kept as geometry ── */
+async function pdfVecLogo(page) {
+  const OPS = pdfjsLib.OPS, vp = page.getViewport({scale:1}), ol = await page.getOperatorList();
+  const mul = (m,n) => [m[0]*n[0]+m[2]*n[1], m[1]*n[0]+m[3]*n[1], m[0]*n[2]+m[2]*n[3], m[1]*n[2]+m[3]*n[3], m[0]*n[4]+m[2]*n[5]+m[4], m[1]*n[4]+m[3]*n[5]+m[5]];
+  const rgbOf = a => typeof a === "string" ? [1,3,5].map(i => parseInt(a.slice(i,i+2),16)) : [a[0],a[1],a[2]];
+  let ctm = vp.transform.slice(), gs = {fill:[0,0,0], stroke:[0,0,0], fa:1, sa:1, lw:1, cap:0, join:0, ml:10, dash:null, dp:0, clip:[]}, trm = 0;
+  const st = [], items = [], skip = {img:0, txt:0, shade:0}; let cur = [], pc = null, cx = 0, cy = 0, sx = 0, sy = 0;
+  const tp = (x,y) => [ctm[0]*x+ctm[2]*y+ctm[4], ctm[1]*x+ctm[3]*y+ctm[5]], sc = () => Math.sqrt(Math.abs(ctm[0]*ctm[3]-ctm[1]*ctm[2])) || 1;
+  const end = () => { if (pc) { gs.clip = gs.clip.concat([{p:cur, eo:pc.eo}]); pc = null; } cur = []; };
+  const paint = (fill, stroke, eo, close) => {
+    if (close && cur.length) cur.push(["Z"]);
+    if (cur.length && (fill || stroke)) { const k = sc();
+      items.push({p:cur, eo, fill: fill ? gs.fill : null, fa: gs.fa, sa: gs.sa, clip: gs.clip,
+        stroke: stroke ? {c: gs.stroke, w: Math.max(.05, gs.lw*k), cap: gs.cap, join: gs.join, ml: gs.ml, dash: gs.dash ? gs.dash.map(v => v*k) : null, dp: gs.dp*k} : null}); }
+    end();
+  };
+  const {fnArray:F, argsArray:A} = ol;
+  for (let i = 0; i < F.length; i++) {
+    const f = F[i], a = A[i];
+    if (f === OPS.save) st.push([ctm, {...gs}, trm]);
+    else if (f === OPS.restore) { const s0 = st.pop(); if (s0) { ctm = s0[0]; gs = s0[1]; trm = s0[2]; } }
+    else if (f === OPS.transform) ctm = mul(ctm, a);
+    else if (f === OPS.paintFormXObjectBegin) { st.push([ctm, {...gs}, trm]); if (a && a[0]) ctm = mul(ctm, a[0]);
+      if (a && a[1]) { const [x0,y0,x1,y1] = a[1]; gs.clip = gs.clip.concat([{p:[["M",...tp(x0,y0)],["L",...tp(x1,y0)],["L",...tp(x1,y1)],["L",...tp(x0,y1)],["Z"]], eo:false}]); } }
+    else if (f === OPS.paintFormXObjectEnd) { const s0 = st.pop(); if (s0) { ctm = s0[0]; gs = s0[1]; trm = s0[2]; } }
+    else if (f === OPS.setFillRGBColor) gs.fill = rgbOf(a);
+    else if (f === OPS.setStrokeRGBColor) gs.stroke = rgbOf(a);
+    else if (f === OPS.setLineWidth) gs.lw = a[0];
+    else if (f === OPS.setLineCap) gs.cap = a[0];
+    else if (f === OPS.setLineJoin) gs.join = a[0];
+    else if (f === OPS.setMiterLimit) gs.ml = a[0];
+    else if (f === OPS.setDash) { gs.dash = (a[0] && a[0].length) ? a[0].slice() : null; gs.dp = a[1] || 0; }
+    else if (f === OPS.setTextRenderingMode) trm = a[0];
+    else if (f === OPS.setGState) { for (const [k,v] of a[0]) { if (k === "LW") gs.lw = v; else if (k === "LC") gs.cap = v; else if (k === "LJ") gs.join = v; else if (k === "ML") gs.ml = v;
+      else if (k === "D") { gs.dash = (v[0] && v[0].length) ? v[0].slice() : null; gs.dp = v[1] || 0; } else if (k === "CA") gs.sa = v; else if (k === "ca") gs.fa = v; } }
+    else if (f === OPS.constructPath) {
+      const po = a[0], pa = a[1]; let k = 0;
+      for (const op of po) {
+        if (op === OPS.moveTo) { const p = tp(pa[k],pa[k+1]); k += 2; cur.push(["M",...p]); cx = sx = p[0]; cy = sy = p[1]; }
+        else if (op === OPS.lineTo) { const p = tp(pa[k],pa[k+1]); k += 2; cur.push(["L",...p]); cx = p[0]; cy = p[1]; }
+        else if (op === OPS.curveTo) { const c1 = tp(pa[k],pa[k+1]), c2 = tp(pa[k+2],pa[k+3]), p = tp(pa[k+4],pa[k+5]); k += 6; cur.push(["C",...c1,...c2,...p]); cx = p[0]; cy = p[1]; }
+        else if (op === OPS.curveTo2) { const c2 = tp(pa[k],pa[k+1]), p = tp(pa[k+2],pa[k+3]); k += 4; cur.push(["C",cx,cy,...c2,...p]); cx = p[0]; cy = p[1]; }
+        else if (op === OPS.curveTo3) { const c1 = tp(pa[k],pa[k+1]), p = tp(pa[k+2],pa[k+3]); k += 4; cur.push(["C",...c1,...p,...p]); cx = p[0]; cy = p[1]; }
+        else if (op === OPS.closePath) { cur.push(["Z"]); cx = sx; cy = sy; }
+        else if (op === OPS.rectangle) { const x = pa[k], y = pa[k+1], w = pa[k+2], h = pa[k+3]; k += 4;
+          const q = [tp(x,y), tp(x+w,y), tp(x+w,y+h), tp(x,y+h)]; cur.push(["M",...q[0]],["L",...q[1]],["L",...q[2]],["L",...q[3]],["Z"]); cx = sx = q[0][0]; cy = sy = q[0][1]; }
+      }
+    }
+    else if (f === OPS.clip) pc = {eo:false};
+    else if (f === OPS.eoClip) pc = {eo:true};
+    else if (f === OPS.endPath) end();
+    else if (f === OPS.stroke) paint(false,true,false,false);
+    else if (f === OPS.closeStroke) paint(false,true,false,true);
+    else if (f === OPS.fill) paint(true,false,false,false);
+    else if (f === OPS.eoFill) paint(true,false,true,false);
+    else if (f === OPS.fillStroke) paint(true,true,false,false);
+    else if (f === OPS.eoFillStroke) paint(true,true,true,false);
+    else if (f === OPS.closeFillStroke) paint(true,true,false,true);
+    else if (f === OPS.closeEOFillStroke) paint(true,true,true,true);
+    else if (f === OPS.paintSolidColorImageMask) { const q = [tp(0,0), tp(1,0), tp(1,1), tp(0,1)]; cur = [["M",...q[0]],["L",...q[1]],["L",...q[2]],["L",...q[3]],["Z"]]; paint(true,false,false,false); }
+    else if (f === OPS.shadingFill) skip.shade++;
+    else if (f === OPS.paintImageXObject || f === OPS.paintImageXObjectRepeat || f === OPS.paintInlineImageXObject || f === OPS.paintInlineImageXObjectGroup || f === OPS.paintImageMaskXObject || f === OPS.paintImageMaskXObjectGroup || f === OPS.paintImageMaskXObjectRepeat || f === OPS.paintJpegXObject) skip.img++;
+    else if ((f === OPS.showText || f === OPS.showSpacedText || f === OPS.nextLineShowText || f === OPS.nextLineSetSpacingShowText) && trm !== 3) skip.txt++;
+  }
+  return {w: vp.width, h: vp.height, items, skip};
+}
+const vecP = o => o._p || (o._p = (() => { const p = new Path2D(); for (const c of o.p) { if (c[0] === "M") p.moveTo(c[1],c[2]); else if (c[0] === "L") p.lineTo(c[1],c[2]); else if (c[0] === "C") p.bezierCurveTo(c[1],c[2],c[3],c[4],c[5],c[6]); else p.closePath(); } return p; })());
+const vecTint = (c, inv) => { const l = (.299*c[0]+.587*c[1]+.114*c[2])/255; return inv ? l : 1-l; };
+function drawVec(ctx, L, w, h) {   // vector logo, centred on the origin, w × h (mm) — redrawn from paths at any zoom
+  const I = IMGS[L.img], V = I && I.vec; if (!V) return;
+  const spotM = L.lm !== "full", hex = L.col.split("|")[1], base = ctx.globalAlpha;
+  ctx.save(); ctx.translate(-w/2,-h/2); ctx.scale(w/V.w, h/V.h);
+  for (const it of V.items) {
+    let fs = null, ss = null, fa = 0, sa = 0;
+    if (it.fill) { if (spotM) { const t = vecTint(it.fill,L.inv)*it.fa; if (t > .002) { fs = hex; fa = t; } } else { fs = `rgb(${it.fill.join(",")})`; fa = it.fa; } }
+    if (it.stroke) { if (spotM) { const t = vecTint(it.stroke.c,L.inv)*it.sa; if (t > .002) { ss = hex; sa = t; } } else { ss = `rgb(${it.stroke.c.join(",")})`; sa = it.sa; } }
+    if (!fs && !ss) continue;
+    ctx.save(); for (const c of it.clip) ctx.clip(vecP(c), c.eo ? "evenodd" : "nonzero");
+    if (fs) { ctx.globalAlpha = base*fa; ctx.fillStyle = fs; ctx.fill(vecP(it), it.eo ? "evenodd" : "nonzero"); }
+    if (ss) { const s0 = it.stroke; ctx.globalAlpha = base*sa; ctx.strokeStyle = ss; ctx.lineWidth = s0.w; ctx.lineCap = ["butt","round","square"][s0.cap] || "butt"; ctx.lineJoin = ["miter","round","bevel"][s0.join] || "miter"; ctx.miterLimit = s0.ml;
+      ctx.setLineDash(s0.dash || []); ctx.lineDashOffset = s0.dp || 0; ctx.stroke(vecP(it)); }
+    ctx.restore();
+  }
+  ctx.restore();
+}
+function drawLogo(ctx, L, w, h) { const I = IMGS[L.img]; if (!I) return; if (I.vec) drawVec(ctx, L, w, h); else { const cv = logoCv(L); if (cv) ctx.drawImage(cv, -w/2, -h/2, w, h); } }
+
 /* ── logo / image import (raster stored once in IMGS, layers reference it by id) ── */
 async function imgLoad(f) {
+  // PDF logos are rendered from their first page into the same canvas-backed
+  // image store used by raster/SVG logos. This keeps the existing layer tools,
+  // sizing, preview and PDF export pipeline unchanged.
+  if (f.type === "application/pdf" || /\.pdf$/i.test(f.name || "")) {
+    pdfInit();
+    const doc = await pdfjsLib.getDocument({data:new Uint8Array(await f.arrayBuffer())}).promise;
+    const page = await doc.getPage(1);
+    let vec = null; try { vec = await pdfVecLogo(page); } catch (_) {}
+    if (vec && vec.items.length) {
+      const sk = vec.skip, lost = [sk.img && "embedded bitmaps", sk.txt && "live text (convert it to outlines in your design app first)", sk.shade && "gradients/shadings"].filter(Boolean);
+      if (lost.length) showReport("<b>PDF logo imported as vector.</b> Not carried over: " + lost.join(", ") + ".");
+      const id = "i" + Date.now().toString(36) + (imgN++); IMGS[id] = {w:vec.w, h:vec.h, vec, cv:null};
+      try { page.cleanup(); await doc.destroy(); } catch (_) {}
+      return id;
+    }
+    const base = page.getViewport({scale:1});
+    showReport("<b>This PDF has no vector artwork</b> (it is a scanned/bitmap page), so it was imported as an image.");
+    const scale = Math.min(2.5, 3000 / Math.max(base.width, base.height));
+    const vp = page.getViewport({scale:Math.max(.1, scale)});
+    const cv = document.createElement("canvas");
+    cv.width = Math.max(1, Math.ceil(vp.width)); cv.height = Math.max(1, Math.ceil(vp.height));
+    const ctx = cv.getContext("2d", {alpha:true});
+    await page.render({canvasContext:ctx, viewport:vp, background:"rgba(0,0,0,0)"}).promise;
+    const id = "i" + Date.now().toString(36) + (imgN++);
+    IMGS[id] = {w:cv.width, h:cv.height, cv};
+    try { page.cleanup(); await doc.destroy(); } catch (_) {}
+    return id;
+  }
   const url = URL.createObjectURL(f);
   try {
     const im = new Image(); im.src = url; await im.decode();
@@ -2732,7 +2848,7 @@ async function artPdf(cutOps, pW, pH, ox, oy, k) {
   const f = v => (+v).toFixed(3), g6 = v => (+v).toFixed(6), pe = s => String(s).replace(/[\\()]/g,"\\$&").replace(/[^\x20-\x7E]/g, ch => { const n = ch.charCodeAt(0); return n >= 0xA0 && n <= 0xFF ? "\\" + n.toString(8) : "?"; });
   const nm = s => "/" + String(s).replace(/[^A-Za-z0-9_.-]/g, m => "#" + m.charCodeAt(0).toString(16).padStart(2,"0"));
   const fn = alt => add(`<< /FunctionType 2 /Domain [0 1] /Range [0 1 0 1 0 1 0 1] /C0 [0 0 0 0] /C1 [${alt.join(" ")}] /N 1 >>`);
-  const cs = {}, csD = [], ocg = [], props = [], fonts = {}, fontD = [], xo = [], used = {}, ufRes = {}; let body = "";
+  const gsA = {}, gsD = [], cs = {}, csD = [], ocg = [], props = [], fonts = {}, fontD = [], xo = [], used = {}, ufRes = {}; let body = "";
   const spot = (name,alt) => { if (!cs[name]) { cs[name] = "CS"+csD.length; csD.push(`/${cs[name]} [/Separation ${nm(name)} /DeviceCMYK ${fn(alt)} 0 R]`); } return cs[name]; };
   const npl = [], layer = (label, content, op, np) => { const o = add(`<< /Type /OCG /Name (${pe(label)}) ${np ? "/Usage << /Print << /Subtype /Print /PrintState /OFF >> /View << /ViewState /ON >> >> " : ""}>>`); ocg.push(o+" 0 R"); if (np) npl.push(o+" 0 R"); const mc = "MC"+props.length; props.push(`/${mc} ${o} 0 R`); body += `/OC /${mc} BDC\nq\n/${op ? "GSov" : "GSno"} gs\n${content}\nQ\nEMC\n`; };
   const rr = (X,Y,W,H,r) => { const q = r*.5523, v = a => f(a);
@@ -2793,6 +2909,27 @@ async function artPdf(cutOps, pW, pH, ox, oy, k) {
         fres = baseF(key); show = `(${pe(L.t||" ")})`; }
       c += `q\n${cmM}\nBT\n/${fres} ${f(L.sz)} Tf\n${f(-W/2)} ${f(-H*.3)} Td\n${show} Tj\nET\nQ`;
     }
+    else if (L.k === "logo" && IMGS[L.img].vec) {   // vector logo → real PDF path operators (no image XObject)
+      const V = IMGS[L.img].vec, spM = L.lm !== "full", g4 = v => (+v).toFixed(4), cn = spM ? spot(name, altCmyk(name,hex,cm)) : null;
+      const PP = pa => pa.map(q => q[0] === "M" ? `${f(q[1])} ${f(q[2])} m` : q[0] === "L" ? `${f(q[1])} ${f(q[2])} l` : q[0] === "C" ? `${f(q[1])} ${f(q[2])} ${f(q[3])} ${f(q[4])} ${f(q[5])} ${f(q[6])} c` : "h").join("\n");
+      const rg = c => c.map(v => g4(v/255)).join(" ");
+      const out = [`q\n${cmM}\n${g6(W/V.w)} 0 0 ${g6(-H/V.h)} ${f(-W/2)} ${f(H/2)} cm`];
+      for (const it of V.items) {
+        let ft = 0, stt = 0;
+        if (spM) { if (it.fill) ft = vecTint(it.fill,L.inv)*it.fa*t; if (it.stroke) stt = vecTint(it.stroke.c,L.inv)*it.sa*t; if (ft < .0005) ft = 0; if (stt < .0005) stt = 0; }
+        const hasF = spM ? ft > 0 : !!it.fill, hasS = spM ? stt > 0 : !!it.stroke; if (!hasF && !hasS) continue;
+        let o = "q\n";
+        for (const c of it.clip) o += `${PP(c.p)}\n${c.eo ? "W*" : "W"} n\n`;
+        if (spM) { if (hasF) o += `/${cn} cs ${g4(ft)} scn\n`; if (hasS) o += `/${cn} CS ${g4(stt)} SCN\n`; }
+        else { const fa = it.fa*t, sa = it.sa*t;
+          if (fa < 1 || sa < 1) { const key = g4(fa) + "_" + g4(sa); if (!gsA[key]) { gsA[key] = "GA" + gsD.length; gsD.push(`/${gsA[key]} << /Type /ExtGState /ca ${g4(fa)} /CA ${g4(sa)} >>`); } o += `/${gsA[key]} gs\n`; }
+          if (hasF) o += `${rg(it.fill)} rg\n`; if (hasS) o += `${rg(it.stroke.c)} RG\n`; }
+        if (hasS) { const s0 = it.stroke; o += `${g4(s0.w)} w ${s0.cap|0} J ${s0.join|0} j ${g4(s0.ml)} M ${s0.dash ? `[${s0.dash.map(g4).join(" ")}] ${g4(s0.dp)}` : "[] 0"} d\n`; }
+        o += PP(it.p) + "\n" + (hasF && hasS ? (it.eo ? "B*" : "B") : hasF ? (it.eo ? "f*" : "f") : "S") + "\nQ";
+        out.push(o);
+      }
+      out.push("Q"); c += out.join("\n");
+    }
     else if (L.k === "logo") {
       const I = IMGS[L.img], D = I.cv.getContext("2d").getImageData(0,0,I.w,I.h).data, np = I.w*I.h, dim = `/Type /XObject /Subtype /Image /Width ${I.w} /Height ${I.h}`; let im;
       if (L.lm === "full") {
@@ -2820,7 +2957,7 @@ async function artPdf(cutOps, pW, pH, ox, oy, k) {
   const ref = ocg.join(" ");
   O[0] = `<< /Type /Catalog /Pages 2 0 R /OCProperties << /OCGs [${ref}] /D << /Order [${ref}] /ON [${ref}]${npl.length ? ` /AS [<< /Event /Print /Category [/Print] /OCGs [${npl.join(" ")}] >>]` : ""} >> >> >>`;
   O[1] = `<< /Type /Pages /Kids [3 0 R] /Count 1 >>`;
-  O[2] = `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${f(pW)} ${f(pH)}] /Resources << /ColorSpace << ${csD.join(" ")} >> /ExtGState << /GSov << /Type /ExtGState /OP true /op true /OPM 1 >> /GSno << /Type /ExtGState /OP false /op false /OPM 0 >> >> /Properties << ${props.join(" ")} >>${fontD.length ? ` /Font << ${fontD.join(" ")} >>` : ""}${xo.length ? ` /XObject << ${xo.join(" ")} >>` : ""} >> /Contents 4 0 R >>`;
+  O[2] = `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${f(pW)} ${f(pH)}] /Resources << /ColorSpace << ${csD.join(" ")} >> /ExtGState << /GSov << /Type /ExtGState /OP true /op true /OPM 1 >> /GSno << /Type /ExtGState /OP false /op false /OPM 0 >> ${gsD.join(" ")} >> /Properties << ${props.join(" ")} >>${fontD.length ? ` /Font << ${fontD.join(" ")} >>` : ""}${xo.length ? ` /XObject << ${xo.join(" ")} >>` : ""} >> /Contents 4 0 R >>`;
   O[3] = `<< /Length ${body.length} >>\nstream\n${body}endstream`;
   const enc = new TextEncoder(), parts = [], off = []; let len = 0; const put = u => { if (typeof u === "string") u = enc.encode(u); parts.push(u); len += u.length; };
   put("%PDF-1.6\n");
@@ -2885,7 +3022,7 @@ async function makeLayersPreview(CB) {
     if (L.k === "text" || L.k === "logo") {
       ctx.translate(cx,cy); ctx.rotate((L.rot||0)*Math.PI/180); ctx.scale(L.mir==="h"?-1:1,L.mir==="v"?-1:1);
       if (L.k === "text") { ctx.font = fontStr(L, L.sz*PT*scale); ctx.textAlign="center"; ctx.textBaseline="alphabetic"; ctx.fillText(L.t||" ",0,h*.3); }
-      else { const I=IMGS[L.img]; if (I) { const im=logoCv(L); if (im) ctx.drawImage(im,-w/2,-h/2,w,h); } }
+      else drawLogo(ctx, L, w, h);
     } else if (L.k === "rect" && L.r>0) {
       const r=Math.min(L.r*scale,w/2,h/2); ctx.beginPath(); ctx.roundRect(X(b.x),Y(b.y),w,h,r); ctx.fill();
     } else ctx.fillRect(X(b.x),Y(b.y),w,h);
