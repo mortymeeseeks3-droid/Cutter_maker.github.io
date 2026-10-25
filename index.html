@@ -267,6 +267,14 @@ body.pf #dimKey{display:none}
       <label class="s2">Page title<input id="jTitle" type="text" placeholder="CUTTER PROFILE" autocomplete="off"></label>
       <label style="grid-column:span 4">Subtitle under page title<input id="jSubtitle" type="text" placeholder="Dimension &amp; specification sheet" autocomplete="off"></label>
       <label>Header / accent<input id="jBar" type="color" value="#0085ca"></label>
+      <div id="blueprintColourControls" style="grid-column:span 4;display:none;border:1px solid #426080;border-radius:7px;padding:10px;background:#101d2b">
+        <div style="font-weight:700;margin-bottom:8px;color:#dcecff">Blueprint colours</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <label>Main background colour<input id="jBlueprintBg" type="color" value="#092e63"></label>
+          <label>White details / accent colour<input id="jBlueprintFg" type="color" value="#ffffff"></label>
+        </div>
+        <small style="display:block;margin-top:6px;color:#c3d3e5">These colours apply only to the blueprint PDF. Other export styles are unchanged.</small>
+      </div>
       <label style="grid-column:span 4">Use colour from loaded palette<select id="jPalette"><option value="">Use header colour above</option></select></label>
       <label>&nbsp;<button id="jBrandReset" type="button" title="Back to CUTTER PROFILE and the default blue">Reset</button></label>
     </div>
@@ -2150,11 +2158,14 @@ const exportA4 = async () => {
   const PW=297, PH=210, M=8, pW=PW*m, pH=PH*m, sh=S.placed;
   const blueprint = a4Mode === "blueprint";
   const paletteHex = (document.getElementById("jPalette")?.value || "");
-  const BC = blueprint ? "#FFFFFF" : (paletteHex || job.bar || "#0085ca");
-  const NAVY = blueprint ? "1 1 1" : "0.07 0.12 0.22";
-  const GREY = blueprint ? "0.78 0.88 1" : "0.42 0.46 0.52";
-  const RULE = blueprint ? "0.55 0.76 1" : "0.80 0.82 0.86";
   const hexs=(h,k)=>[1,3,5].map(i=>(Math.min(255,parseInt(h.substr(i,2),16)*(k||1))/255).toFixed(3)).join(" "), hex=h=>hexs(h,1), deep=h=>hexs(h,0.62);
+  const BP_BG = /^#[0-9a-f]{6}$/i.test(document.getElementById("jBlueprintBg")?.value||"") ? document.getElementById("jBlueprintBg").value : "#092e63";
+  const BP_FG = /^#[0-9a-f]{6}$/i.test(document.getElementById("jBlueprintFg")?.value||"") ? document.getElementById("jBlueprintFg").value : "#ffffff";
+  const BP_BG_RGB = hex(BP_BG), BP_FG_RGB = hex(BP_FG);
+  const BC = blueprint ? BP_FG : (paletteHex || job.bar || "#0085ca");
+  const NAVY = blueprint ? BP_FG_RGB : "0.07 0.12 0.22";
+  const GREY = blueprint ? hex(BP_FG) : "0.42 0.46 0.52";
+  const RULE = blueprint ? hex(BP_FG) : "0.80 0.82 0.86";
   const WD={" ":278,".":278,":":278,",":278,"(":333,")":333,"-":333,"/":278,"x":500,"m":833,"R":722,"T":611,"L":556,"B":722,"O":778,"u":556,"t":278,"e":556,"r":333,"P":667,"o":556,"f":278,"i":222,"l":222,"S":667,"h":556,"a":556,"p":556,"M":833,"E":667,"A":667,"U":722,"K":667,"Y":667,"N":722,"C":722,"D":722,"G":778,"I":278,"W":944,"H":722,"n":556,"s":500,"c":500,"d":556,"g":556,"k":500,"b":556,"y":500,"w":722,"v":500,"z":500,"j":222,"q":556,"·":278,"Ø":778,"×":584};
   const tw=(s,sz,b)=>{ let t=0; for (const c of s) t+=(WD[c]||556); return t*sz/1000*(b?1.06:1); };
   const esc=s=>Array.from(String(s)).map(c=>{ const k=c.charCodeAt(0); if (c==="\\"||c==="("||c===")") return "\\"+c; if (k>=32&&k<127) return c; if (k>=160&&k<=255) return "\\"+k.toString(8); if (k===8212) return "\\227"; return "?"; }).join("");
@@ -2197,25 +2208,25 @@ const exportA4 = async () => {
 
   // Paint the entire A4 page first. This belongs in exportA4 (not the other PDF exporter).
   if (blueprint) {
-    ops.push("q 0.035 0.18 0.39 rg 0 0 "+f(pW)+" "+f(pH)+" re f Q");
+    ops.push(`q ${BP_BG_RGB} rg 0 0 ${f(pW)} ${f(pH)} re f Q`);
   }
 
   /* queued labels, placed without overlaps */
   const Q=[], obst=[], late=[];
   const pill=(str,cx,cy,hx,rot,sz)=>{
     const tww=tw(str,sz,true), w=tww+5, h=sz*1.7, bw=rot?h:w, bh=rot?w:h, c=hex(hx);
-    ops.push(blueprint ? "q /G9 gs 0.035 0.18 0.39 rg" : "q /G9 gs 1 1 1 rg"); rrp(cx-bw/2,cy-bh/2,bw,bh,2,"f"); ops.push("Q");
-    ops.push(`${blueprint ? "1 1 1" : c} RG 0.7 w`); rrp(cx-bw/2,cy-bh/2,bw,bh,2,"S");
+    ops.push(blueprint ? `q /G9 gs ${BP_BG_RGB} rg` : "q /G9 gs 1 1 1 rg"); rrp(cx-bw/2,cy-bh/2,bw,bh,2,"f"); ops.push("Q");
+    ops.push(`${blueprint ? BP_FG_RGB : c} RG 0.7 w`); rrp(cx-bw/2,cy-bh/2,bw,bh,2,"S");
     ops.push(`${NAVY} rg BT /F2 ${f(sz)} Tf `+(rot?`0 1 -1 0 ${f(cx+sz*0.35)} ${f(pH-cy-tww/2)} Tm`:`1 0 0 1 ${f(cx-tww/2)} ${f(pH-cy-sz*0.35)} Tm`)+` (${esc(str)}) Tj ET`);
   };
-  const arr=(tx,ty,dx,dy,c,L,W)=>ops.push(`${c} rg 1 1 1 RG 0.4 w ${Pp(tx,ty)} m ${Pp(tx-dx*L-dy*W,ty-dy*L+dx*W)} l ${Pp(tx-dx*L+dy*W,ty-dy*L-dx*W)} l h B`);
+  const arr=(tx,ty,dx,dy,c,L,W)=>ops.push(`${c} rg ${blueprint ? BP_FG_RGB : "1 1 1"} RG 0.4 w ${Pp(tx,ty)} m ${Pp(tx-dx*L-dy*W,ty-dy*L+dx*W)} l ${Pp(tx-dx*L+dy*W,ty-dy*L-dx*W)} l h B`);
   const dimH=(x1,x2,y,str,hx,sz,lw,lineHex,prio)=>{ const len=Math.abs(x2-x1); if (len<0.8*m) return; sz=sz||6;
     const c=lineHex?hex(lineHex):deep(hx), L=Math.min(2.2*m,len*.3), W=L*.36, d=x2>x1?1:-1;
-    ops.push(`1 1 1 RG ${(lw||0.6)+1.3} w ${Pp(x1,y)} m ${Pp(x2,y)} l S ${c} RG ${lw||0.6} w ${Pp(x1,y)} m ${Pp(x2,y)} l S`); arr(x1,y,d,0,c,L,W); arr(x2,y,-d,0,c,L,W);
+    ops.push(`${blueprint ? BP_FG_RGB : "1 1 1"} RG ${(lw||0.6)+1.3} w ${Pp(x1,y)} m ${Pp(x2,y)} l S ${c} RG ${lw||0.6} w ${Pp(x1,y)} m ${Pp(x2,y)} l S`); arr(x1,y,d,0,c,L,W); arr(x2,y,-d,0,c,L,W);
     Q.push({str,cx:(x1+x2)/2,cy:y,hx,rot:false,sz,axis:"h",a0:Math.min(x1,x2),a1:Math.max(x1,x2),prio:prio||1}); };
   const dimV=(y1,y2,x,str,hx,sz,lw,lineHex,prio)=>{ const len=Math.abs(y2-y1); if (len<0.8*m) return; sz=sz||6;
     const c=lineHex?hex(lineHex):deep(hx), L=Math.min(2.2*m,len*.3), W=L*.36, d=y2>y1?1:-1;
-    ops.push(`1 1 1 RG ${(lw||0.6)+1.3} w ${Pp(x,y1)} m ${Pp(x,y2)} l S ${c} RG ${lw||0.6} w ${Pp(x,y1)} m ${Pp(x,y2)} l S`); arr(x,y1,0,d,c,L,W); arr(x,y2,0,-d,c,L,W);
+    ops.push(`${blueprint ? BP_FG_RGB : "1 1 1"} RG ${(lw||0.6)+1.3} w ${Pp(x,y1)} m ${Pp(x,y2)} l S ${c} RG ${lw||0.6} w ${Pp(x,y1)} m ${Pp(x,y2)} l S`); arr(x,y1,0,d,c,L,W); arr(x,y2,0,-d,c,L,W);
     Q.push({str,cx:x,cy:(y1+y2)/2,hx,rot:true,sz,axis:"v",a0:Math.min(y1,y2),a1:Math.max(y1,y2),prio:prio||1}); };
   const ov=(a,b,p)=>a[0]<b[2]+p&&a[2]>b[0]-p&&a[1]<b[3]+p&&a[3]>b[1]-p;
   function placeLabels() {
@@ -2249,7 +2260,7 @@ const exportA4 = async () => {
   /* 1 ▸ frame, header */
   ops.push(`${NAVY} RG 0.9 w`); rect(M*m,M*m,(PW-2*M)*m,(PH-2*M)*m,"S");
   line((M)*m,HY*m,(PW-M)*m,HY*m,NAVY,0.9);
-  ops.push(`${hex(blueprint ? "#FFFFFF" : (paletteHex || job.bar || BC))} rg`); rect(M*m,HY*m,(PW-2*M)*m,1.1*m,"f");
+  ops.push(`${hex(blueprint ? BP_FG : (paletteHex || job.bar || BC))} rg`); rect(M*m,HY*m,(PW-2*M)*m,1.1*m,"f");
   let tx=M+5;
   if (LG) {
     const bw=48, bh=14, ar=LG.w/LG.h; let lw=bw, lh=bw/ar; if (lh>bh) { lh=bh; lw=bh*ar; }
@@ -2265,17 +2276,17 @@ const exportA4 = async () => {
 
   /* 2 ▸ drawing */
   line(rx0*m,HY*m,rx0*m,(PH-M)*m,NAVY,0.9);
-  ops.push(blueprint ? "0.035 0.18 0.39 rg" : "0.975 0.98 0.985 rg"); shapePath(P0,"f");
+  ops.push(blueprint ? `${BP_BG_RGB} rg` : "0.975 0.98 0.985 rg"); shapePath(P0,"f");
   sh.forEach((s,i)=>{
-    const hx=blueprint ? "#FFFFFF" : gOf[i].hex;
+    const hx=blueprint ? BP_FG : gOf[i].hex;
     if (s.type==="dash") { const q=fitDash(s); ops.push(`${deep(hx)} RG 1.6 w 0 J ${!s.solid&&q.tie>0?`[${f(q.cut*K)} ${f(q.tie*K)}] 0 d `:""}${Pp(gx(s.x),gy(s.y))} m ${Pp(gx(s.x+s.w),gy(s.y+s.h))} l S [] 0 d`); }
     else { if (!(s.type==="path"&&!s.closed)) { ops.push(`q /G5 gs ${hex(hx)} rg`); shapePath(s,"f"); ops.push("Q"); } ops.push(`${deep(hx)} RG 0.9 w`); { if (pieceMode(s)) pdfEdgePieces(ops,Pp,s,gx,gy,K); else { const dp=dashPdf(s,K); if (dp) ops.push(dp); shapePath(s,"S"); if (dp) ops.push("[] 0 d"); } } }
   });
   ops.push(`${hex(BC)} RG 1.4 w`); { if (pieceMode(P0)) pdfEdgePieces(ops,Pp,P0,gx,gy,K); else { const dp=dashPdf(P0,K); if (dp) ops.push(dp); shapePath(P0,"S"); if (dp) ops.push("[] 0 d"); } }
-  for (const g of computeGaps()) { if (g.ax===0) dimH(gx(g.from),gx(g.to),gy(g.mid),d2(g.g),blueprint?"#FFFFFF":"#9aa3af",5,0.4,blueprint?"#B8D9FF":"#5b6470",3); else dimV(gy(g.from),gy(g.to),gx(g.mid),d2(g.g),blueprint?"#FFFFFF":"#9aa3af",5,0.4,blueprint?"#B8D9FF":"#5b6470",3); }
+  for (const g of computeGaps()) { if (g.ax===0) dimH(gx(g.from),gx(g.to),gy(g.mid),d2(g.g),blueprint?BP_FG:"#9aa3af",5,0.4,blueprint?BP_FG:"#5b6470",3); else dimV(gy(g.from),gy(g.to),gx(g.mid),d2(g.g),blueprint?BP_FG:"#9aa3af",5,0.4,blueprint?BP_FG:"#5b6470",3); }
   const corners=s=>[["tl",s.x,s.y,1,1],["tr",s.x+s.w,s.y,-1,1],["br",s.x+s.w,s.y+s.h,-1,-1],["bl",s.x,s.y+s.h,1,-1]];
   sh.forEach((s,i)=>{
-    const g=gOf[i], hx=blueprint ? "#FFFFFF" : g.hex, first=g.idx[0]===i, cxm=s.x+s.w/2, cym=s.y+s.h/2, round=s.type==="circle"||s.type==="oval";
+    const g=gOf[i], hx=blueprint ? BP_FG : g.hex, first=g.idx[0]===i, cxm=s.x+s.w/2, cym=s.y+s.h/2, round=s.type==="circle"||s.type==="oval";
     if (first) {
       if (s.type==="dash") { const q=fitDash(s), len=s.orient==="h"?s.w:s.h, str=`${d2(len)}   cut ${d2(q.cut)} / tie ${d2(q.tie)}`;
         if (s.orient==="h") dimH(gx(s.x),gx(s.x+s.w),gy(s.y)-3*m,str,hx,5.6); else dimV(gy(s.y),gy(s.y+s.h),gx(s.x)-3*m,str,hx,5.6); }
@@ -2304,7 +2315,7 @@ const exportA4 = async () => {
       Q.push({str:"R"+d2(r),cx:gx(cx)+sx*(r*sc*.4+10)*m,cy:gy(cy)-sy*4.6*m,hx:BC,rot:false,sz:6,axis:null,prio:0,leader:[gx(cx+sx*r*.2929),gy(cy+sy*r*.2929)]}); }
   }
   const dimA=(a,b,str,hx)=>{ const c=deep(hx), len=Math.hypot(b[0]-a[0],b[1]-a[1]); if (len<0.8*m) return; const ux=(b[0]-a[0])/len, uy=(b[1]-a[1])/len, L=Math.min(2.2*m,len*.3), W=L*.36;
-    ops.push(`1 1 1 RG 1.9 w ${Pp(a[0],a[1])} m ${Pp(b[0],b[1])} l S ${c} RG 0.6 w ${Pp(a[0],a[1])} m ${Pp(b[0],b[1])} l S`); arr(a[0],a[1],ux,uy,c,L,W); arr(b[0],b[1],-ux,-uy,c,L,W);
+    ops.push(`${blueprint ? BP_FG_RGB : "1 1 1"} RG 1.9 w ${Pp(a[0],a[1])} m ${Pp(b[0],b[1])} l S ${c} RG 0.6 w ${Pp(a[0],a[1])} m ${Pp(b[0],b[1])} l S`); arr(a[0],a[1],ux,uy,c,L,W); arr(b[0],b[1],-ux,-uy,c,L,W);
     Q.push({str,cx:(a[0]+b[0])/2,cy:(a[1]+b[1])/2,hx,rot:false,sz:5.2,axis:null,prio:1}); };
   const pathDimsA4=(s,hx)=>{
     const D=pathDims(s), off=3.2*m;
@@ -2397,7 +2408,7 @@ const refreshJobPalette = () => {
   unique.forEach(e => { const o=document.createElement("option"); o.value=e.hex; o.textContent=e.name+" — "+e.hex; sel.appendChild(o); });
   if ([...sel.options].some(o=>o.value===keep)) sel.value=keep;
 };
-const a4Open = mode => { a4Mode = mode; refreshJobPalette(); $("a4Title").textContent = mode === "safe" ? "Cutter at 1:1 with SAFE ZONE guide" : mode === "layers" ? "All design layers + colour key" : mode === "blueprint" ? "A4 blueprint sheet" : "A4 formal sheet"; $("jLogoMsg").textContent=""; $("a4Modal").hidden=false; $("jClient").focus(); };
+const a4Open = mode => { a4Mode = mode; refreshJobPalette(); $("a4Title").textContent = mode === "safe" ? "Cutter at 1:1 with SAFE ZONE guide" : mode === "layers" ? "All design layers + colour key" : mode === "blueprint" ? "A4 blueprint sheet" : "A4 formal sheet"; $("blueprintColourControls").style.display = mode === "blueprint" ? "block" : "none"; $("jLogoMsg").textContent=""; $("a4Modal").hidden=false; $("jClient").focus(); };
 $("downloadA4").onclick = () => a4Open("a4");
 $("downloadBlueprint").onclick = () => a4Open("blueprint");
 $("downloadSafe").onclick = () => a4Open("safe");
