@@ -5668,7 +5668,7 @@ function bcBuild() {
   const col = (k, lab) => `<label>${lab}<input type="color" data-k="${k}"></label>`;
   $("bcBody").innerHTML = `
   <div class="bcP" data-p="content">
-    <label>Barcode type<select data-k="sym"><option value="qr">QR Code</option><option value="EAN13">EAN-13</option><option value="EAN8">EAN-8</option><option value="CODE128">CODE-128</option><option value="CODE93">CODE-93</option><option value="ITF14">ITF-14</option><option value="UPC">UPC(A)</option><option value="CODABAR">CODABAR</option><option value="EAN5">EAN-5</option></select></label>
+    <label>Barcode type<select data-k="sym"><option value="qr">QR Code</option><option value="EAN13">EAN-13</option><option value="EAN8">EAN-8</option><option value="CODE128">CODE-128</option><option value="CODE39">CODE-39</option><option value="ITF14">ITF-14</option><option value="UPC">UPC(A)</option><option value="CODABAR">CODABAR</option><option value="EAN5">EAN-5</option></select></label>
     <div id="bcQrContent">
     <div class="bcT2"><button type="button" data-ty="url">URL</button><button type="button" data-ty="text">Text</button><button type="button" data-ty="wifi">WiFi</button><button type="button" data-ty="vcard">vCard</button></div>
     <div data-tp="url"><label>Web address<input type="url" data-k="url" placeholder="https://example.com"></label></div>
