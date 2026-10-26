@@ -2634,7 +2634,7 @@ var qrcode = function() {
 }));
 
 </script>
-<script>
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>\n<script>
 "use strict";
 const $ = id => document.getElementById(id);
 const c = $("c"), x = c.getContext("2d");
@@ -5591,9 +5591,12 @@ function svgToVec(svgStr) {
     for (const c of node.children) {
       const tag = c.localName; if (/^(defs|mask|clipPath|image|linearGradient|radialGradient|title|desc|style)$/.test(tag)) continue;
       const at = a => c.getAttribute(a), has = a => c.hasAttribute(a);
-      const s = {fill: has("fill") ? colour(at("fill"), st.fill) : st.fill, stroke: has("stroke") ? colour(at("stroke"), st.stroke) : st.stroke, sw: has("stroke-width") ? parseFloat(at("stroke-width")) : st.sw,
-        da: has("stroke-dasharray") ? (nums(at("stroke-dasharray")).length ? nums(at("stroke-dasharray")) : null) : st.da, cap: has("stroke-linecap") ? at("stroke-linecap") : st.cap, join: has("stroke-linejoin") ? at("stroke-linejoin") : st.join,
-        fs: has("font-size") ? parseFloat(at("font-size")) : st.fs, fw: has("font-weight") ? at("font-weight") : st.fw};
+      // Support SVG generators (including JsBarcode) that store paint attributes in inline style.
+      const inlineStyle = {}; String(at("style") || "").split(";").forEach(rule => { const i = rule.indexOf(":"); if (i > 0) inlineStyle[rule.slice(0,i).trim().toLowerCase()] = rule.slice(i+1).trim(); });
+      const val = a => has(a) ? at(a) : (inlineStyle[a] != null ? inlineStyle[a] : null);
+      const s = {fill: val("fill") != null ? colour(val("fill"), st.fill) : st.fill, stroke: val("stroke") != null ? colour(val("stroke"), st.stroke) : st.stroke, sw: val("stroke-width") != null ? parseFloat(val("stroke-width")) : st.sw,
+        da: val("stroke-dasharray") != null ? (nums(val("stroke-dasharray")).length ? nums(val("stroke-dasharray")) : null) : st.da, cap: val("stroke-linecap") != null ? val("stroke-linecap") : st.cap, join: val("stroke-linejoin") != null ? val("stroke-linejoin") : st.join,
+        fs: val("font-size") != null ? parseFloat(val("font-size")) : st.fs, fw: val("font-weight") != null ? val("font-weight") : st.fw};
       const m = has("transform") ? mul(M, parseT(at("transform"))) : M;
       if (tag === "g") { walk(c, s, m); continue; }
       let cm = null;
@@ -5632,15 +5635,31 @@ function svgToVec(svgStr) {
 
 /* ── popup: FunQR options → barcode layer ── */
 const BC_OPTS = {"style-body": [["standard", "Standard (Squares)"], ["fluid-mosaic", "Water droplet"], ["merged-hollow-pills", "Merged Hollow Pills"], ["tri-fluid", "Alien script"], ["crosshatch", "Crossbars"], ["liquid-merge", "Liquid Merge"], ["crystals", "Small squares"], ["triangles", "Triangles"], ["octagons", "Triangle blobs"], ["ninja", "Diamonds"], ["dots", "Standard Dots"], ["mixed-dots", "Mixed Size Dots"], ["vertical-rounded", "Vertical Pills"], ["horizontal-rounded", "Horizontal Pills"], ["fluid", "Fluid (Connected)"], ["wave", "Wave"], ["mosaic", "Mosaic"], ["bricks", "Bricks"], ["scaling", "Scaling"]], "style-dots": [["square", "Square"], ["rounded", "Rounded"], ["dots", "Circular Dots"], ["classy", "Classy"], ["small-square", "Small Square"], ["diamond", "Diamond"], ["cross", "Cross"], ["star", "Star"], ["triangle", "Triangle"], ["heavy-donut", "Heavy Donut"], ["half-rect", "Half Rectangle"], ["tiny-dot", "Tiny Dot"], ["tiny-square", "Tiny Square"], ["rounded-triangle", "Rounded Triangle"]], "style-corners-square": [["square", "Square"], ["dot", "Circle"], ["dotted-rounded", "Dotted Rounded"], ["tiny-dotted-square", "Tiny Dot Square"], ["tiny-dotted-circle", "Tiny Dot Circle"], ["dashed-rounded", "Dashed Rounded"], ["leaf-top", "small-diamond"], ["star", "big diamond"]], "style-corners-dots": [["square", "Square"], ["dot", "Circle"], ["rounded", "Rounded Square"], ["diamond", "Diamond"], ["heart", "Heart"], ["shield", "Hexagon"], ["cross", "Cross"], ["star", "Star"]], "frame-style": [["none", "None"], ["circle", "Circle Frame"], ["rounded-rect", "Rounded Rectangle"], ["label-bottom", "Label Strip (Bottom)"], ["label-top", "Label Strip (Top)"], ["double-strip", "Double Strip"], ["boxed", "Boxed Border"]], "error-level": [["L", "Low (7%)"], ["M", "Medium (15%)"], ["Q", "Quartile (25%)"], ["H", "High (30%)"]]};
-const BC_DEF = () => ({type:"url", url:"https://", text:"", ssid:"", pass:"", fname:"", lname:"", phone:"", email:"",
+const BC_DEF = () => ({sym:"qr", linearData:"", type:"url", url:"https://", text:"", ssid:"", pass:"", fname:"", lname:"", phone:"", email:"",
   o:{errorLevel:"M", bodyStyle:"standard", dotsStyle:"square", cornersSquareStyle:"square", cornersDotStyle:"square", transparentBg:true, colorBg:"#ffffff", colorFg:"#000000", colorCornerFrame:"#000000", colorCornerDot:"#000000",
      frameStyle:"none", frameText:"SCAN ME", frameTextTop:"SCAN ME", frameTextBottom:"VISIT US", frameColor:"#000000", frameTextColor:"#ffffff", frameTextSize:14, curvedText:true}});
 let bcCfg = null, bcEdit = -1, bcSvg = "", bcTab = "content", bcTimer = 0;
-const bcData = c => { const t = c.type; if (t === "url") { const u = c.url.trim(); return u === "https://" ? "" : u; } if (t === "text") return c.text.trim();
+const bcData = c => { if (c.sym && c.sym !== "qr") return (c.linearData || "").trim(); const t = c.type; if (t === "url") { const u = c.url.trim(); return u === "https://" ? "" : u; } if (t === "text") return c.text.trim();
   if (t === "wifi") { const s = c.ssid.trim(); return s ? `WIFI:T:WPA;S:${s};P:${c.pass};;` : ""; }
   const fn = c.fname.trim(), ln = c.lname.trim(); if (!fn && !ln) return ""; let v = `BEGIN:VCARD\nVERSION:3.0\nN:${ln};${fn};;;\nFN:${fn} ${ln}\n`; if (c.phone.trim()) v += `TEL:${c.phone.trim()}\n`; if (c.email.trim()) v += `EMAIL:${c.email.trim()}\n`; return v + "END:VCARD"; };
-function bcMake(c) {   // → FunQR SVG string (throws when the payload is too long)
-  const d = bcData(c); if (!d) return ""; const qr = qrcode(0, c.o.errorLevel); qr.addData(d); qr.make();
+function bcMake(c) {
+  const d = bcData(c); if (!d) return "";
+  if (c.sym && c.sym !== "qr") {
+    if (typeof JsBarcode !== "function") throw new Error("Barcode engine did not load. Connect to the internet and reload this app to use linear barcode types.");
+    const svg = document.createElementNS("http://www.w3.org/2000/svg","svg");
+    svg.setAttribute("xmlns","http://www.w3.org/2000/svg");
+    const fmt = ({EAN13:"EAN13",EAN8:"EAN8",CODE128:"CODE128",CODE93:"CODE93",ITF14:"ITF14",UPC:"UPC",CODABAR:"codabar",EAN5:"EAN5"})[c.sym];
+    JsBarcode(svg, d, {format:fmt, lineColor:c.o.colorFg || "#000000", background:"transparent", width:2, height:80, displayValue:true, font:"Arial", fontSize:14, margin:10});
+    // The vector importer needs a transparent canvas, not a full-page background shape.
+    // Add an explicit background only when transparency is disabled, behind all barcode bars.
+    if (!c.o.transparentBg) {
+      const bb = svg.getBBox(), bg = document.createElementNS("http://www.w3.org/2000/svg","rect");
+      bg.setAttribute("x", bb.x); bg.setAttribute("y", bb.y); bg.setAttribute("width", bb.width); bg.setAttribute("height", bb.height);
+      bg.setAttribute("fill", c.o.colorBg || "#ffffff"); svg.insertBefore(bg, svg.firstChild);
+    }
+    return new XMLSerializer().serializeToString(svg);
+  }
+  const qr = qrcode(0, c.o.errorLevel); qr.addData(d); qr.make();
   FQ.state.qrMatrix = qr; FQ.state.moduleCount = qr.getModuleCount(); Object.assign(FQ.state.options, c.o, {fillMode:"solid", size:300, frameFont:"Arial, sans-serif"}); FQ.state.logoImage = null;
   return FQ.renderSVG({withBackground: !c.o.transparentBg});
 }
@@ -5649,11 +5668,15 @@ function bcBuild() {
   const col = (k, lab) => `<label>${lab}<input type="color" data-k="${k}"></label>`;
   $("bcBody").innerHTML = `
   <div class="bcP" data-p="content">
+    <label>Barcode type<select data-k="sym"><option value="qr">QR Code</option><option value="EAN13">EAN-13</option><option value="EAN8">EAN-8</option><option value="CODE128">CODE-128</option><option value="CODE93">CODE-93</option><option value="ITF14">ITF-14</option><option value="UPC">UPC(A)</option><option value="CODABAR">CODABAR</option><option value="EAN5">EAN-5</option></select></label>
+    <div id="bcQrContent">
     <div class="bcT2"><button type="button" data-ty="url">URL</button><button type="button" data-ty="text">Text</button><button type="button" data-ty="wifi">WiFi</button><button type="button" data-ty="vcard">vCard</button></div>
     <div data-tp="url"><label>Web address<input type="url" data-k="url" placeholder="https://example.com"></label></div>
     <div data-tp="text"><label>Text<textarea data-k="text" rows="3" placeholder="Enter your text here…"></textarea></label></div>
     <div data-tp="wifi" class="g"><label class="s2">Network name (SSID)<input type="text" data-k="ssid"></label><label class="s2">Password<input type="text" data-k="pass"></label></div>
     <div data-tp="vcard" class="g"><label class="s2">First name<input type="text" data-k="fname"></label><label class="s2">Last name<input type="text" data-k="lname"></label><label class="s2">Phone<input type="tel" data-k="phone"></label><label class="s2">Email<input type="email" data-k="email"></label></div>
+    </div>
+    <div id="bcLinearContent" hidden><label>Barcode data<input type="text" data-k="linearData" autocapitalize="none" autocomplete="off" spellcheck="false" placeholder="Enter digits or text for this barcode"></label><div class="bcN">Enter data appropriate for the selected barcode standard. EAN, UPC and EAN-5 require valid numeric lengths.</div></div>
   </div>
   <div class="bcP" data-p="style">
     <div class="g"><label class="s2">Body style${sel("o.bodyStyle", BC_OPTS["style-body"])}</label><label class="s2">Dot shape${sel("o.dotsStyle", BC_OPTS["style-dots"])}</label>
@@ -5673,6 +5696,8 @@ function bcBuild() {
 }
 function bcSync() {   // config → controls
   const c = bcCfg; document.querySelectorAll("#bcModal [data-k]").forEach(e => { const p = e.dataset.k.split("."), v = p.length === 2 ? c[p[0]][p[1]] : c[p[0]]; if (e.type === "checkbox") e.checked = !!v; else e.value = v; });
+  const linear = !!(c.sym && c.sym !== "qr");
+  $("bcQrContent").hidden = linear; $("bcLinearContent").hidden = !linear;
   document.querySelectorAll("#bcModal [data-ty]").forEach(b => b.classList.toggle("act", b.dataset.ty === c.type));
   document.querySelectorAll("#bcModal [data-tp]").forEach(d => d.hidden = d.dataset.tp !== c.type);
   document.querySelectorAll("#bcModal .bcP").forEach(d => d.hidden = d.dataset.p !== bcTab);
