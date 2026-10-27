@@ -3,110 +3,280 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Cutter Maker v28 · Palette / spot artwork</title>
+<meta name="theme-color" content="#161a20">
+<title>CutterMaker V44 · Cutter profiles &amp; spot artwork</title>
 <style>
+/* ═══════════ CutterMaker · workbench theme ═══════════
+   Accents are the job's own spot colours: 7 = magenta (cut), 8 = cyan (secondary). */
+:root{
+  color-scheme:dark;
+  --bg:#0e1116; --well:#0b0d11; --panel:#161a20; --panel2:#1c2129; --field:#0c0f13;
+  --line:#262d37; --line2:#333b47;
+  --tx:#e7eaef; --mut:#9aa3b2; --dim:#6b7486;
+  --m7:#e6007e; --m7hi:#ff3d9f; --c8:#22cbe9; --c8bg:#0d333c; --warn:#ffb020;
+  --ui:"Segoe UI Variable Text","Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --head:"Bahnschrift SemiCondensed","Bahnschrift","Segoe UI Variable Display","Segoe UI",Roboto,sans-serif;
+  --num:"Cascadia Mono","Cascadia Code",Consolas,"Roboto Mono","DejaVu Sans Mono",monospace;
+  --tools:340px; --insp:332px;
+}
+*{box-sizing:border-box;scrollbar-width:thin;scrollbar-color:#38414e transparent}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:#333c49;border-radius:6px;border:2px solid transparent;background-clip:padding-box}
+::-webkit-scrollbar-thumb:hover{background:#465163;background-clip:padding-box;border:2px solid transparent}
 [hidden]{display:none!important}
-body{margin:0;background:#111;color:#eee;font-family:sans-serif;height:100vh;display:flex;flex-direction:column-reverse;overflow:hidden}
-#side{background:#1a1a1a;box-sizing:border-box;padding:8px 12px 14px;height:42vh;overflow-y:auto;flex-shrink:0;border-top:2px solid #333;font-size:14px}
-#app{position:relative;flex:1;min-width:0;min-height:0}
-#c{position:absolute;inset:0;width:100%;height:100%;background:#222;touch-action:none;cursor:default}
-@media(min-width:900px){body{flex-direction:row}#side{width:330px;height:100vh;border-top:0;border-right:2px solid #333}}
-h3{margin:12px 0 6px;color:#d6d600;font-size:15px}
-.g{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:6px}
-.g5{grid-template-columns:repeat(5,1fr)}
-.s2{grid-column:span 2}
-label{display:flex;flex-direction:column;font-size:11px;color:#aaa;min-width:0}
-input,select{width:100%;box-sizing:border-box;padding:6px 5px;margin-top:2px;background:#000;color:#eee;border:1px solid #444;font-size:14px;border-radius:3px}
-input:focus,select:focus{outline:none;border-color:#d6d600}
-button{padding:8px 10px;background:#333;color:#eee;border:1px solid #555;font-size:14px;cursor:pointer;border-radius:4px}
-button:hover{border-color:#d6d600;color:#d6d600}
-.btns{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
-.pri{background:#d6d600;color:#111;border-color:#d6d600;font-weight:bold}
-.pri:hover{color:#111;background:#eeee33}
-summary{cursor:pointer;color:#aaa;font-size:12px;margin:4px 0}
-#bar{position:absolute;top:8px;right:8px;display:flex;gap:6px;z-index:5}
-#bar button{padding:7px 12px;background:#1a1a00;color:#d6d600;border:1px solid #d6d600;font-weight:bold;font-size:13px}
-#bar button:hover{background:#d6d600;color:#111}
-#status{position:absolute;left:8px;top:10px;right:260px;font-size:12px;color:#bbb;pointer-events:none;text-shadow:0 1px 2px #000}
-#report{position:absolute;left:8px;bottom:8px;right:8px;max-width:560px;max-height:60%;overflow:auto;padding-right:26px!important;background:rgba(0,0,0,.85);border:1px solid #d6d600;border-radius:6px;padding:8px 10px;font-size:12px;line-height:1.5;color:#ddd;cursor:pointer;z-index:6}
-.ck{flex-direction:row;align-items:center;gap:5px;font-size:12px;color:#ddd}
-.ck input{width:auto;margin:0}
-#bar button.on{background:#d6d600;color:#111}
-#report.c{max-height:22px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;padding-top:4px!important;padding-bottom:4px!important}
-#report .rx{position:absolute;right:8px;top:3px;color:#d6d600;font-size:13px}
+html{height:100%}
+body{margin:0;height:100vh;height:100dvh;display:flex;flex-direction:column;overflow:hidden;background:var(--bg);color:var(--tx);font:14px/1.4 var(--ui);-webkit-tap-highlight-color:transparent}
+
+/* ── top bar ── */
+#appTop{flex:none;height:52px;display:flex;align-items:center;gap:14px;padding:0 12px 0 14px;background:var(--panel);border-bottom:1px solid var(--line);position:relative;z-index:30}
+.brand{display:flex;align-items:center;gap:10px;min-width:0;white-space:nowrap}
+.brand svg{flex:none}
+.brand b{font:600 21px/1 var(--head);letter-spacing:.2px}
+.brand small{color:var(--dim);font-size:12px;margin-left:6px;font-family:var(--num)}
+#bar{margin-left:auto;display:flex;align-items:center;gap:4px}
+#bar .tb{display:inline-flex;align-items:center;gap:7px;height:36px;padding:0 11px;background:transparent;border:1px solid transparent;color:var(--tx);font-weight:500}
+#bar .tb svg{width:18px;height:18px;flex:none;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+#bar .tb:hover{background:var(--panel2);border-color:var(--line2);color:var(--tx)}
+#bar .tb.on{background:var(--c8bg);border-color:var(--c8);color:var(--c8)}
+#bar .sep{width:1px;height:22px;background:var(--line2);margin:0 6px}
+#bar #expBtn{background:var(--m7);border-color:var(--m7);color:#fff;font-weight:600;padding:0 13px 0 12px;margin-left:6px}
+#bar #expBtn:hover{background:#ff1a92;border-color:#ff1a92;color:#fff}
+#bar #expBtn .chev{width:14px;height:14px;margin-left:-2px}
+
 #exp{position:relative}
-#expMenu{position:absolute;right:0;top:100%;margin-top:4px;background:#161616;border:1px solid #d6d600;border-radius:6px;padding:5px;display:flex;flex-direction:column;gap:4px;min-width:280px;z-index:20}
-#expMenu button{text-align:left;font-size:13px;font-weight:normal;background:#242424;color:#eee;border:1px solid #444;padding:8px 10px}
-#expMenu button:hover{background:#d6d600;color:#111}
-#status{right:340px!important}
-#bcModal{position:fixed;inset:0;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;z-index:55;padding:8px}
-#bcModal .card{background:#1a1a1a;border:1px solid #d6d600;border-radius:8px;padding:12px;width:100%;max-width:520px;max-height:100%;display:flex;flex-direction:column;box-sizing:border-box}
-#bcModal h3{margin:0 0 6px;color:#d6d600}
-#bcPrev{background:#fff;border-radius:6px;height:150px;flex-shrink:0;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:4px;box-sizing:border-box}
-#bcPrev svg{width:100%;height:100%}
-.bcT2{display:flex;gap:6px;margin:8px 0}.bcT2 button{flex:1;padding:6px 4px;font-size:13px}.bcT2 button.act{background:#d6d600;color:#111;border-color:#d6d600}
-#bcBody{overflow-y:auto;min-height:0;flex:1}
-#bcBody textarea{width:100%;box-sizing:border-box;background:#000;color:#eee;border:1px solid #444;border-radius:3px;padding:6px 5px;font-size:14px;margin-top:2px;font-family:inherit}
-#bcBody input[type=color]{height:34px;padding:2px}
-.bcN{font-size:11px;color:#888;margin:6px 0}
-#bcModal .btns{margin:10px 0 0;justify-content:flex-end}
-#bcAdd:disabled{opacity:.4;cursor:default}
-#a4Modal{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:50;padding:12px;overflow:auto}
-#a4Modal .card{background:#1a1a1a;border:1px solid #d6d600;border-radius:8px;padding:16px;width:100%;max-width:440px}
-#a4Modal .card h3{color:#d6d600}
-.logoRow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px;padding:10px;border:1px dashed #555;border-radius:6px}
-label.fbtn{display:inline-block;flex-direction:row;padding:9px 12px;background:#2a2a1a;border:1px solid #d6d600;color:#d6d600;border-radius:4px;cursor:pointer;font-size:14px;font-weight:bold}
-label.fbtn:hover{background:#d6d600;color:#111}
-#jLogoPrev{max-height:42px;max-width:140px;background:#fff;border-radius:3px;padding:2px}
-#jLogoName{font-size:12px;color:#aaa;flex:1;min-width:120px;word-break:break-all}
-#jLogoMsg{color:#ff7b7b;font-size:12px;margin-top:6px;min-height:14px}
-.eb{padding:6px 10px!important;font-size:13px!important}
-.eb.act{background:#d6d600!important;color:#111!important;border-color:#d6d600!important}
-#linePanel{position:sticky;top:-8px;z-index:6;background:#101010;border:1px solid #d6d600;border-radius:6px;padding:6px 8px;margin:-2px 0 8px;box-shadow:0 4px 10px rgba(0,0,0,.6)}
-.lnHead{display:flex;align-items:center;gap:8px;font-size:12px;color:#d6d600}
-.lnHead span{color:#9aa;font-size:11px}
-.lnHead button{margin-left:auto;padding:1px 8px;font-size:12px}
-.lnRow{display:flex;gap:8px;align-items:center;margin-top:6px}
+#expMenu{position:absolute;right:0;top:calc(100% + 8px);width:340px;background:var(--panel);border:1px solid var(--line2);border-radius:9px;padding:6px;display:flex;flex-direction:column;gap:1px;z-index:40;box-shadow:0 20px 48px rgba(0,0,0,.6)}
+#expMenu .grp{padding:9px 10px 4px;font-size:12px;color:var(--dim);font-weight:600}
+#expMenu .grp:first-child{padding-top:5px}
+#expMenu button{height:auto;min-height:36px;text-align:left;background:transparent;border:1px solid transparent;color:var(--tx);padding:7px 10px;font-weight:400;border-radius:6px}
+#expMenu button:hover{background:var(--panel2);border-color:var(--line2);color:var(--tx)}
+
+/* ── workbench grid ── */
+#shell{flex:1;min-height:0;display:grid;grid-template-columns:var(--tools) minmax(0,1fr) var(--insp);grid-template-rows:auto minmax(0,1fr);grid-template-areas:"tabs app insp" "tools app insp"}
+#side{display:contents}
+#tabs{grid-area:tabs;display:flex;background:var(--panel);border-bottom:1px solid var(--line);border-right:1px solid var(--line)}
+#tabs button{flex:1;position:relative;height:44px;padding:0 4px;background:transparent;border:0;border-bottom:2px solid transparent;border-radius:0;color:var(--mut);font:600 15.5px/1 var(--head);letter-spacing:.15px}
+#tabs button:hover{color:var(--tx);background:rgba(255,255,255,.025)}
+#tabs button[aria-selected=true]{color:var(--tx);border-bottom-color:var(--m7)}
+#tabs button:focus-visible{outline:2px solid var(--c8);outline-offset:-3px}
+#tabs .tSel{display:none}
+#tools{grid-area:tools;min-height:0;display:flex;background:var(--panel);border-right:1px solid var(--line)}
+.pane{display:none;flex:1;min-width:0;overflow-y:auto;padding:16px 16px 28px}
+#shell[data-tab=profile] #paneProfile,#shell[data-tab=shapes] #paneShapes,#shell[data-tab=art] #paneArt{display:block}
+#insp{grid-area:insp;min-height:0;overflow-y:auto;background:var(--panel);border-left:1px solid var(--line);padding:16px 16px 28px}
+#insp .inspT{margin:0 0 14px;font:600 15.5px/1.2 var(--head);color:var(--tx);height:28px;display:flex;align-items:center}
+#app{grid-area:app;position:relative;min-width:0;min-height:0;overflow:hidden;background-color:var(--well);
+  background-image:linear-gradient(rgba(255,255,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.03) 1px,transparent 1px),linear-gradient(rgba(255,255,255,.055) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.055) 1px,transparent 1px);
+  background-size:20px 20px,20px 20px,100px 100px,100px 100px}
+#c{position:absolute;inset:0;width:100%;height:100%;background:transparent;touch-action:none;cursor:default}
+
+/* ── sections ── */
+.blk+.blk{margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}
+h3{margin:0 0 10px;font:600 16px/1.2 var(--head);color:var(--tx);letter-spacing:.1px}
+h3 small{font:400 12px var(--ui);color:var(--dim);margin-left:6px}
+.note{margin:10px 0 0;font-size:12.5px;line-height:1.55;color:var(--mut)}
+.note b{color:var(--tx);font-weight:600}
+.legend{display:flex;flex-wrap:wrap;gap:4px 12px;margin:10px 0 0;font-size:12px;color:var(--mut)}
+.legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+
+/* ── fields ── */
+.g{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px 7px;margin-bottom:10px}
+.g5{grid-template-columns:repeat(5,minmax(0,1fr))}
+.s2{grid-column:span 2}
+#artP .c4{grid-column:span 4}
+label{display:flex;flex-direction:column;gap:4px;min-width:0;font-size:12px;color:var(--mut)}
+input,select,textarea{font:inherit;color:var(--tx);background:var(--field);border:1px solid var(--line2);border-radius:5px;padding:0 8px;height:34px;width:100%;min-width:0;margin:0;transition:border-color .12s,box-shadow .12s}
+input[type=number]{font-family:var(--num);font-size:13.5px;text-align:right;-moz-appearance:textfield}
+input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+input::placeholder{color:#566072}
+input:hover,select:hover{border-color:#43505f}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--c8);box-shadow:0 0 0 3px rgba(34,203,233,.18)}
+select{appearance:none;-webkit-appearance:none;padding-right:26px;cursor:pointer;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%239aa3b2' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 9px center}
+option{background:#1c2129;color:var(--tx)}
+input[type=color]{height:34px;padding:2px 3px;cursor:pointer}
+input[type=checkbox]{width:16px;height:16px;padding:0;margin:0;accent-color:var(--c8);flex:none;cursor:pointer}
+label.ck{flex-direction:row;align-items:center;gap:9px;min-height:30px;font-size:13px;color:var(--tx);cursor:pointer}
+.ckrow{display:flex;flex-wrap:wrap;gap:2px 16px}
+
+/* ── buttons ── */
+button{font:inherit;font-size:13.5px;height:34px;padding:0 12px;background:var(--panel2);color:var(--tx);border:1px solid var(--line2);border-radius:5px;cursor:pointer;transition:background .12s,border-color .12s,color .12s}
+button:hover{border-color:var(--c8);color:#fff}
+button:active{background:#262d37}
+button:focus-visible,summary:focus-visible,label.fbtn:focus-within{outline:2px solid var(--c8);outline-offset:2px}
+button:disabled{opacity:.4;cursor:default;border-color:var(--line2);color:var(--tx)}
+.btns{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 0}
+.pri{background:var(--m7);border-color:var(--m7);color:#fff;font-weight:600}
+.pri:hover{background:#ff1a92;border-color:#ff1a92;color:#fff}
+.eb{height:32px;padding:0 11px;font-size:13px}
+.eb.act{background:var(--c8bg);border-color:var(--c8);color:var(--c8)}
+.btns button[data-a],.btns button[data-aa]{min-width:38px;padding:0 9px;font-size:15px}
+details{margin:12px 0 0}
+summary{display:flex;align-items:center;gap:7px;cursor:pointer;color:var(--mut);font-size:13px;padding:5px 0;list-style:none;user-select:none}
+summary::-webkit-details-marker{display:none}
+summary::before{content:"";width:6px;height:6px;border-right:1.7px solid currentColor;border-bottom:1.7px solid currentColor;transform:rotate(-45deg);transition:transform .15s;margin:0 3px 0 1px}
+details[open]>summary::before{transform:rotate(45deg)}
+summary:hover{color:var(--tx)}
+details>.g,details>.btns,details>div{margin-top:8px}
+
+/* ── selection inspector ── */
+#inspEmpty{padding:22px 4px;color:var(--mut);font-size:13px;line-height:1.6}
+#inspEmpty b{display:block;font:600 16px var(--head);color:var(--tx);margin-bottom:6px}
+#insp:has(#linePanel:not([hidden]),#selP:not([hidden]),#artP:not([hidden])) #inspEmpty{display:none}
+#linePanel{background:var(--panel2);border:1px solid var(--line2);border-left:3px solid var(--m7);border-radius:6px;padding:11px 12px 12px;margin-bottom:18px}
+.lnHead{display:flex;align-items:center;gap:8px;min-height:26px}
+.lnHead b{font:600 16px var(--head)}
+.lnHead span{color:var(--mut);font-size:12px}
+.lnHead button{margin-left:auto;height:26px;padding:0 8px;font-size:12px}
+.lnRow{display:flex;gap:8px;align-items:center;margin-top:10px}
 .seg{display:flex;flex:1}
-.seg button{flex:1;padding:5px 6px;font-size:13px;border-radius:0}
-.seg button:first-child{border-radius:4px 0 0 4px}.seg button:last-child{border-radius:0 4px 4px 0}
-.seg button.act{background:#d6d600;color:#111;border-color:#d6d600;font-weight:bold}
-#lnAll{padding:5px 8px;font-size:12px}
-#lnDashRow label{flex-direction:row;align-items:center;gap:6px;font-size:12px;color:#ddd}
-#lnDashRow input{width:70px;margin:0;padding:4px}
-#pfPop{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);background:rgba(10,10,10,.96);border:1px solid #d6d600;border-radius:8px;padding:8px 10px;z-index:30;box-shadow:0 6px 18px rgba(0,0,0,.7);width:max-content;max-width:calc(100% - 16px)}
-.pfRow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.pfRow b{font-size:13px;color:#d6d600}
-#pfPop button{padding:6px 12px;font-size:13px}
-#pfPop button:disabled{opacity:.4;cursor:default}
-#pfHint{font-size:11px;color:#aaa;margin-top:6px;max-width:440px}
-body.pf #report{bottom:92px}
-#dimKey{position:absolute;right:8px;bottom:8px;max-width:360px;background:rgba(10,10,10,.85);border:1px solid #444;border-radius:6px;padding:6px 9px;font-size:11px;line-height:1.55;color:#ddd;pointer-events:none;z-index:4}
-#dimKey b{color:#d6d600;font-size:11px;display:block;margin-bottom:2px}
-#dimKey i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px;vertical-align:middle}
+.seg button{flex:1;height:32px;padding:0 6px;border-radius:0;margin-left:-1px}
+.seg button:first-child{border-radius:5px 0 0 5px;margin-left:0}
+.seg button:last-child{border-radius:0 5px 5px 0}
+.seg button.act{background:var(--c8bg);border-color:var(--c8);color:var(--c8);position:relative;z-index:1;font-weight:600}
+#lnAll{height:32px;padding:0 9px;font-size:12.5px}
+#lnDashRow label{flex-direction:row;align-items:center;gap:7px;color:var(--tx)}
+#lnDashRow input{width:72px}
+#lnSpotRow select{margin-top:0}
+#selP,#artP{margin-top:0}
+#artP{border:0;padding:0}
+#artP select{max-height:none}
+
+/* ── artwork layer list ── */
+#artList,#palList{display:flex;flex-direction:column;gap:4px;margin-bottom:8px}
+.aRow{display:flex;align-items:center;gap:9px;min-height:34px;padding:0 9px;background:var(--panel2);border:1px solid var(--line);border-radius:5px;font-size:13px;cursor:pointer}
+.aRow:hover{border-color:var(--line2)}
+.aRow.act{border-color:var(--c8);background:#112830}
+.aRow i{width:14px;height:14px;border:1px solid rgba(255,255,255,.3);border-radius:3px;flex:none}
+.aRow span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.aRow input{width:auto;height:auto}
+.aRow button{height:24px;padding:0 7px;font-size:12px}
+#fontMsg{font-size:12px;color:var(--dim);margin:2px 0 4px}
+
+/* ── canvas overlays ── */
+#status{position:absolute;left:12px;top:10px;max-width:calc(100% - 24px);padding:4px 10px;border:1px solid var(--line);border-radius:5px;background:rgba(11,13,17,.78);color:var(--mut);font:12px/1.5 var(--num);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none;z-index:3}
+#status:empty{display:none}
+#report{position:absolute;left:12px;bottom:12px;right:12px;max-width:580px;max-height:60%;overflow:auto;padding:10px 34px 10px 13px;background:rgba(18,22,28,.95);border:1px solid var(--line2);border-left:3px solid var(--c8);border-radius:6px;font-size:12.5px;line-height:1.55;color:var(--tx);cursor:pointer;z-index:6;box-shadow:0 10px 30px rgba(0,0,0,.45)}
+#report.c{max-height:32px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;padding-top:6px;padding-bottom:6px}
+#report .rx{position:absolute;right:10px;top:6px;color:var(--c8);font-size:13px}
+#dimKey{position:absolute;right:12px;bottom:12px;max-width:360px;padding:8px 11px;background:rgba(18,22,28,.9);border:1px solid var(--line2);border-radius:6px;font-size:12px;line-height:1.6;color:var(--tx);pointer-events:none;z-index:4}
+#dimKey b{display:block;margin-bottom:2px;font:600 13px var(--head);color:var(--tx)}
+#dimKey i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:7px;vertical-align:middle}
 body.pf #dimKey{display:none}
-#hint{font-size:11px;color:#777;margin-top:10px}
-#artList{display:flex;flex-direction:column;gap:3px;margin-bottom:6px}
-.aRow{display:flex;align-items:center;gap:7px;padding:5px 7px;background:#222;border:1px solid #333;border-radius:4px;font-size:12px;cursor:pointer}
-.aRow.act{border-color:#d6d600;background:#2a2a14}.aRow i{width:12px;height:12px;border:1px solid #666;border-radius:2px;flex:none}
-.aRow span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.aRow input{width:auto;margin:0}
-#artP{border:1px solid #444;border-radius:6px;padding:8px;margin:6px 0}#artP .c4{grid-column:span 4}
-#artP select{max-height:34px}
+body.pf #report{bottom:96px}
+#pfPop{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);width:max-content;max-width:calc(100% - 20px);padding:10px 12px;background:rgba(18,22,28,.97);border:1px solid var(--line2);border-top:3px solid var(--m7);border-radius:8px;z-index:30;box-shadow:0 14px 36px rgba(0,0,0,.6)}
+.pfRow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.pfRow b{font:600 14px var(--head);margin-right:4px}
+#pfPop button{height:32px;padding:0 13px}
+#pfHint{font-size:12px;color:var(--mut);margin-top:7px;max-width:440px}
+
+/* ── dialogs ── */
+#bcModal,#a4Modal{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(5,7,10,.74)}
+#bcModal{z-index:55}
+#a4Modal{z-index:50;overflow:auto}
+#bcModal .card,#a4Modal .card{background:var(--panel);border:1px solid var(--line2);border-top:3px solid var(--m7);border-radius:10px;padding:18px 20px;width:100%;box-shadow:0 28px 70px rgba(0,0,0,.6)}
+#bcModal .card{max-width:580px;max-height:100%;display:flex;flex-direction:column}
+#a4Modal .card{max-width:540px}
+#bcModal h3,#a4Modal .card h3{margin:0 0 12px;font-size:18px;color:var(--tx)}
+#bcPrev{background:#fff;border-radius:6px;height:150px;flex-shrink:0;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:4px}
+#bcPrev svg{width:100%;height:100%}
+.bcT2{display:flex;margin:12px 0}
+.bcT2 button{flex:1;height:32px;padding:0 6px;font-size:13px;border-radius:0;margin-left:-1px}
+.bcT2 button:first-child{border-radius:5px 0 0 5px;margin-left:0}
+.bcT2 button:last-child{border-radius:0 5px 5px 0}
+.bcT2 button.act{background:var(--c8bg);border-color:var(--c8);color:var(--c8);font-weight:600;position:relative;z-index:1}
+#bcBody{overflow-y:auto;min-height:0;flex:1;padding-right:2px}
+#bcBody textarea{height:auto;padding:7px 8px;font-family:inherit;resize:vertical}
+.bcN{font-size:12px;color:var(--dim);margin:8px 0;line-height:1.5}
+#bcModal .btns{margin:14px 0 0;justify-content:flex-end}
+#bcAdd:disabled{opacity:.4;cursor:default}
+.logoRow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px;padding:12px;border:1px dashed var(--line2);border-radius:7px}
+label.fbtn{display:inline-flex;flex-direction:row;align-items:center;padding:0 13px;height:34px;background:transparent;border:1px solid var(--c8);color:var(--c8);border-radius:5px;cursor:pointer;font-size:13.5px;font-weight:600}
+label.fbtn:hover{background:var(--c8bg)}
+#jLogoPrev{max-height:42px;max-width:140px;background:#fff;border-radius:3px;padding:2px}
+#jLogoName{font-size:12px;color:var(--mut);flex:1;min-width:120px;word-break:break-all}
+#jLogoMsg{color:#ff8a8a;font-size:12px;margin-top:6px;min-height:14px}
+#a4Modal small{font-size:12px}
+
+/* ── ≤1099px: inspector moves into the tab strip ── */
+@media (max-width:1099px){
+  #shell{grid-template-columns:var(--tools) minmax(0,1fr);grid-template-areas:"tabs app" "tools app"}
+  #insp{grid-area:tools;border-left:0;border-right:1px solid var(--line)}
+  #insp .inspT{display:none}
+  #tabs .tSel{display:block}
+  #shell[data-tab=sel] #tools{display:none}
+  #shell:not([data-tab=sel]) #insp{display:none}
+  #shell:has(#linePanel:not([hidden]),#selP:not([hidden]),#artP:not([hidden])) #tabs .tSel::after{content:"";position:absolute;top:11px;right:calc(50% - 38px);width:7px;height:7px;border-radius:50%;background:var(--m7)}
+}
+/* ── phones & narrow windows: canvas above, tabbed sheet below ── */
+@media (max-width:719px){
+  #appTop{height:48px;gap:8px;padding:0 8px 0 10px}
+  .brand b,.brand small{display:none}
+  #bar{gap:2px}
+  #bar .tb{height:38px;padding:0 9px}
+  #bar .tb .lbl{display:none}
+  #bar #expBtn .lbl{display:inline}
+  #bar #expBtn{padding:0 11px;margin-left:4px}
+  #bar .sep{margin:0 3px}
+  #shell{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(30vh,1fr) auto minmax(0,45vh);grid-template-areas:"app" "tabs" "tools"}
+  #tabs{border-right:0;border-top:1px solid var(--line)}
+  #tools,#insp{border-right:0;padding-bottom:env(safe-area-inset-bottom)}
+  .pane,#insp{padding:14px 14px 28px}
+  #expMenu{position:fixed;left:8px;right:8px;top:54px;width:auto}
+  #status{font-size:11px;max-width:calc(100% - 20px)}
+  #dimKey{max-width:62%}
+}
+@media (pointer:coarse){
+  input,select{height:42px;font-size:16px}
+  input[type=checkbox]{width:20px;height:20px}
+  button{height:40px}
+  .eb{height:38px}
+  .seg button,.bcT2 button{height:40px}
+  label.ck{min-height:38px}
+  .aRow{min-height:42px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
 <body>
-<div id="side">
-  <div id="linePanel" hidden>
-    <div class="lnHead"><b id="lnTitle"></b><span id="lnLink"></span><button id="lnX" title="Deselect">✕</button></div>
-    <div class="lnRow">
-      <div class="seg"><button data-m="solid">Solid</button><button data-m="dash">Dashed</button><button data-m="off" id="lnOff">None</button></div>
-      <button id="lnAll"></button>
-    </div>
-    <div class="lnRow" id="lnDashRow"><label>Cut<input id="lnC" type="number" step="any" value="3"></label><label>Tie<input id="lnT" type="number" step="any" value="1"></label></div>
-    <div class="lnRow" id="lnSpotRow"><label style="flex:1">Line spot colour (solid or dashed)<select id="lnSpot"><option value="7">7 — 100% Magenta</option><option value="8">8 — 100% Cyan</option></select></label></div>
+<header id="appTop">
+  <div class="brand">
+    <svg width="30" height="30" viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="3" width="26" height="26" rx="6" fill="none" stroke="#e6007e" stroke-width="2.4"/><rect x="9" y="9" width="14" height="14" rx="2" fill="none" stroke="#22cbe9" stroke-width="2" stroke-dasharray="4 2.5"/></svg>
+    <b>CutterMaker</b><small>V44</small>
   </div>
-  <div style="font-size:11px;color:#888;margin:4px 0 8px">Select a profile edge or shape line, choose Dashed, then assign spot colour 7 (magenta) or 8 (cyan) for that line.</div>
-  <h3>Outer profile</h3>
+  <div id="bar">
+    <button id="undo" class="tb" title="Undo (Ctrl+Z)" aria-label="Undo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
+    <button id="fitBtn" class="tb" title="Fit the whole design to the screen (F)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg><span class="lbl">Fit</span></button>
+    <button id="dimBtn" class="tb" title="Show/hide dimensions (D)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h18M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3M3 5v4M21 5v4"/></svg><span class="lbl">Dimensions</span></button>
+    <span class="sep"></span>
+    <button id="importPdf" class="tb" title="Import a cutter profile from a PDF (or drop a PDF on the canvas)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M4 20h16"/></svg><span class="lbl">Import PDF</span></button><input type="file" id="pdfIn" accept=".pdf,application/pdf" hidden>
+    <div id="exp"><button id="expBtn" class="tb" aria-haspopup="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M4 20h16"/></svg><span class="lbl">Export</span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+      <div id="expMenu" hidden>
+        <div class="grp">Cutter file</div>
+        <button id="downloadSvg">SVG — cutter file</button>
+        <button id="downloadPdf">PDF — cutter file</button>
+        <div class="grp">Artwork</div>
+        <button id="downloadPdfArt">PDF — multilayer spot artwork + cutter</button>
+        <button id="downloadLayersKey">PDF — All Design Layers + Colour Key</button>
+        <div class="grp">Sheets</div>
+        <button id="downloadPdfAnnotated">PDF — colour dimension sheet</button>
+        <button id="downloadA4">PDF — A4 formal sheet (client, job no., logo…)</button>
+        <button id="downloadBlueprint">PDF — A4 blueprint sheet (blue &amp; white)</button>
+        <button id="downloadSafe">PDF — cutter 1:1 + SAFE ZONE guide (A4 layout)</button>
+      </div></div>
+  </div>
+</header>
+
+<div id="shell" data-tab="profile">
+  <nav id="tabs" role="tablist" aria-label="Tools">
+    <button type="button" role="tab" data-tab="profile" aria-selected="true">Profile</button>
+    <button type="button" role="tab" data-tab="shapes" aria-selected="false">Shapes</button>
+    <button type="button" role="tab" data-tab="art" aria-selected="false">Artwork</button>
+    <button type="button" role="tab" data-tab="sel" class="tSel" aria-selected="false">Selection</button>
+  </nav>
+  <div id="side">
+    <div id="tools">
+      <section id="paneProfile" class="pane" role="tabpanel">
+        <div class="blk">
+          <h3>Outer profile</h3>
   <div class="g">
     <label class="s2">Shape<select id="pShape"><option value="rect">Rectangle</option><option value="circle">Circle</option><option value="oval">Oval</option><option value="path" hidden>Imported outline</option></select></label>
     <label id="pWL"><span id="pWT">Width</span><input id="pW" type="number" step="any" value="100"></label>
@@ -119,17 +289,29 @@ body.pf #dimKey{display:none}
     <label>↘ BR<input id="pBR" type="number" step="any" value="2"></label>
     <label>↙ BL<input id="pBL" type="number" step="any" value="2"></label>
   </div>
-
-  <h3>Dimensions <span style="font-weight:normal;font-size:11px;color:#888">(D to toggle)</span></h3>
-  <div class="btns" style="gap:4px 12px">
-    <label class="ck"><input type="checkbox" id="dSize" checked>Sizes</label>
-    <label class="ck"><input type="checkbox" id="dGap" checked>Gaps</label>
-    <label class="ck"><input type="checkbox" id="dRad" checked>Radii</label>
-    <label class="ck"><input type="checkbox" id="dSel">Selected only</label>
-  </div>
-  <div style="font-size:11px;color:#888;margin:-2px 0 4px"><span style="color:#4da3ff">■</span> outer &nbsp;<span style="color:#ffb020">■</span> gaps &nbsp;other colours = one per shape</div>
-
-  <h3>Add shape</h3>
+        </div>
+        <div class="blk">
+          <h3>Dimensions on canvas<small>press D</small></h3>
+          <div class="ckrow">
+<label class="ck"><input type="checkbox" id="dSize" checked>Sizes</label>
+<label class="ck"><input type="checkbox" id="dGap" checked>Gaps</label>
+<label class="ck"><input type="checkbox" id="dRad" checked>Radii</label>
+<label class="ck"><input type="checkbox" id="dSel">Selected only</label>
+          </div>
+          <div class="legend"><span><i style="background:#4da3ff"></i>outer</span><span><i style="background:#ffb020"></i>gaps</span><span>other colours: one per shape</span></div>
+        </div>
+        <div class="blk">
+          <h3>Dashed lines</h3>
+          <p class="note" style="margin-top:0">Click a profile edge or a shape line on the canvas, choose <b>Dashed</b>, then pick spot colour 7 (magenta) or 8 (cyan) in the Selection panel.</p>
+          <details>
+            <summary>Shortcuts and tips</summary>
+            <p class="note">Pathfinder: shift-click two or more shapes, then choose <b>Merge</b> (unite) or <b>Trim</b> (cut front shapes out of the back one). Import PDF reads the real vector outlines (outer profile, rectangles with exact corner radii, circles, ovals, dashed lines) — or drop a PDF onto the canvas. Auto layout is on by default: Add packs new shapes against the edges and each other, and profile changes re-pack. Moving a shape by hand turns it off (re-tick it, or press Pack, to re-pack). Drag shapes to move (snaps to edges, centers &amp; other shapes; hold Alt for free move). Arrows nudge 0.1mm (Shift 1mm, Alt 0.01mm). Del removes, Ctrl+D duplicates, Ctrl+Z undoes.</p>
+          </details>
+        </div>
+      </section>
+      <section id="paneShapes" class="pane" role="tabpanel">
+        <div class="blk">
+          <h3>Add shape</h3>
   <div class="g">
     <label class="s2">Type<select id="aType"><option value="rect">Rectangle</option><option value="circle">Circle</option><option value="oval">Oval</option><option value="dash">Dashed line</option></select></label>
     <label id="aWL"><span id="aWT">Width</span><input id="aW" type="number" step="any" value="50"></label>
@@ -156,7 +338,51 @@ body.pf #dimKey{display:none}
     <button id="pack" title="Re-place all shapes automatically, packed against edges and each other">Pack</button>
     <button id="clr">Clear</button>
   </div>
-
+        </div>
+        <div class="blk">
+          <h3>Combine shapes</h3>
+          <p class="note" style="margin-top:0">Shift-click two or more shapes on the canvas, then choose <b>Merge</b> to unite them or <b>Trim</b> to cut the front shapes out of the back one.</p>
+        </div>
+      </section>
+      <section id="paneArt" class="pane" role="tabpanel">
+        <div class="blk">
+          <h3>Artwork layers<small>one PDF layer each</small></h3>
+  <div id="artList"></div>
+  <div class="btns"><button id="aRect" class="eb">+ Rectangle</button><button id="aText" class="eb">+ Text</button><button id="aEye" class="eb">+ Eyemark</button><button id="aBg" class="eb">+ Background</button><button id="aLogo" class="eb">+ Logo / image…</button><button id="aBarcode" class="eb" type="button">+ Barcode…</button><input id="ar_lf" type="file" accept="image/*" hidden></div>
+          <p class="note">Select an artwork layer to drag it on the canvas (snaps to edges/centre, Alt = free, arrows nudge, Esc deselects). Export ▸ “PDF — multilayer spot artwork + cutter”.</p>
+        </div>
+        <div class="blk">
+          <details>
+            <summary>Palettes and fonts</summary>
+  <div id="palList"></div>
+  <div class="btns"><button id="ar_pb" class="eb" type="button">Load palette (.acb / .ase)…</button><input id="ar_pf" type="file" accept=".acb,.ase" multiple hidden></div>
+  <div class="btns"><button id="ar_fb" class="eb" type="button">Load font folder…</button><button id="ar_fi" class="eb" type="button">Load font files…</button><input id="ar_ff" type="file" webkitdirectory multiple hidden><input id="ar_fl" type="file" accept=".ttf,.otf" multiple hidden></div>
+  <div id="fontMsg" style="font-size:11px;color:#888;margin-bottom:6px">No fonts loaded — built-in Sans / Serif / Mono only.</div>
+          </details>
+        </div>
+        <div class="blk">
+          <h3>PDF output</h3>
+  <div class="btns"><button id="opOn" class="eb" type="button">Overprint ALL on</button><button id="opOff" class="eb" type="button">Overprint ALL off</button></div>
+          <div style="margin-top:8px">
+<label class="ck"><input type="checkbox" id="ar_cop">Cutter lines overprint</label>
+<label class="ck"><input type="checkbox" id="ar_dim">Include dimensions layer — follows the Sizes / Gaps / Radii / Selected-only toggles</label>
+<label class="ck"><input type="checkbox" id="ar_cut" checked>Include cutter lines (spot 7/8) in the multilayer PDF</label>
+          </div>
+        </div>
+      </section>
+    </div>
+  <div id="insp">
+    <h2 class="inspT">Selection</h2>
+    <div id="inspEmpty"><b>Nothing selected</b>Click a shape, a profile edge or an artwork layer to edit it here. Drag on the canvas to move it; arrow keys nudge by 0.1&nbsp;mm.</div>
+  <div id="linePanel" hidden>
+    <div class="lnHead"><b id="lnTitle"></b><span id="lnLink"></span><button id="lnX" title="Deselect">✕</button></div>
+    <div class="lnRow">
+      <div class="seg"><button data-m="solid">Solid</button><button data-m="dash">Dashed</button><button data-m="off" id="lnOff">None</button></div>
+      <button id="lnAll"></button>
+    </div>
+    <div class="lnRow" id="lnDashRow"><label>Cut<input id="lnC" type="number" step="any" value="3"></label><label>Tie<input id="lnT" type="number" step="any" value="1"></label></div>
+    <div class="lnRow" id="lnSpotRow"><label style="flex:1">Line spot colour (solid or dashed)<select id="lnSpot"><option value="7">7 — 100% Magenta</option><option value="8">8 — 100% Cyan</option></select></label></div>
+  </div>
   <div id="selP" hidden>
     <h3>Selected · <span id="sType"></span></h3>
     <div class="g">
@@ -189,14 +415,8 @@ body.pf #dimKey{display:none}
       <button id="del" title="Delete">Delete</button>
     </div>
   </div>
-  <h3>Artwork layers <span style="font-weight:normal;font-size:11px;color:#888">palettes · spot colours · each layer = one PDF layer</span></h3>
-  <div id="palList"></div>
-  <div class="btns"><button id="ar_pb" class="eb" type="button">Load palette (.acb / .ase)…</button><input id="ar_pf" type="file" accept=".acb,.ase" multiple hidden></div>
-  <div class="btns"><button id="ar_fb" class="eb" type="button">Load font folder…</button><button id="ar_fi" class="eb" type="button">Load font files…</button><input id="ar_ff" type="file" webkitdirectory multiple hidden><input id="ar_fl" type="file" accept=".ttf,.otf" multiple hidden></div>
-  <div id="fontMsg" style="font-size:11px;color:#888;margin-bottom:6px">No fonts loaded — built-in Sans / Serif / Mono only.</div>
-  <div id="artList"></div>
-  <div class="btns"><button id="aRect" class="eb">+ Rectangle</button><button id="aText" class="eb">+ Text</button><button id="aEye" class="eb">+ Eyemark</button><button id="aBg" class="eb">+ Background</button><button id="aLogo" class="eb">+ Logo / image…</button><button id="aBarcode" class="eb" type="button">+ Barcode…</button><input id="ar_lf" type="file" accept="image/*" hidden></div>
   <div id="artP" hidden>
+    <h3>Artwork layer</h3>
     <div class="g">
       <label class="c4 kT">Text<input id="ar_t" type="text"></label>
       <label class="c4 kC">Colour — search loaded palettes<input id="ar_q" type="text" placeholder="search…" autocomplete="off"><select id="ar_c"></select></label>
@@ -228,15 +448,9 @@ body.pf #dimKey{display:none}
       <div class="g"><label class="s2">Spot name<input id="ar_sn" type="text" autocomplete="off"></label><label>Screen<input id="ar_sh" type="color" value="#ff6600"></label><label>&nbsp;<button id="ar_sa" type="button">Add</button></label></div>
     </details>
   </div>
-  <div class="btns"><button id="opOn" class="eb" type="button">Overprint ALL on</button><button id="opOff" class="eb" type="button">Overprint ALL off</button></div>
-  <label class="ck" style="margin:4px 0"><input type="checkbox" id="ar_cop">Cutter lines overprint</label>
-  <label class="ck" style="margin:4px 0"><input type="checkbox" id="ar_dim">Include dimensions layer — follows the Sizes / Gaps / Radii / Selected-only toggles</label>
-  <label class="ck" style="margin:4px 0"><input type="checkbox" id="ar_cut" checked>Include cutter lines (spot 7/8) in the multilayer PDF</label>
-  <div id="hint" style="margin-top:2px">Select an artwork layer to drag it on the canvas (snaps to edges/centre, Alt = free, arrows nudge, Esc deselects). Export ▸ “PDF — multilayer spot artwork + cutter”.</div>
-  <div id="hint">Pathfinder: shift-click two or more shapes, then choose <b>Merge</b> (unite) or <b>Trim</b> (cut front shapes out of the back one). Import PDF reads the real vector outlines (outer profile, rectangles with exact corner radii, circles, ovals, dashed lines) — or drop a PDF onto the canvas. Auto layout is on by default: Add packs new shapes against the edges and each other, and profile changes re-pack. Moving a shape by hand turns it off (re-tick it, or press Pack, to re-pack). Drag shapes to move (snaps to edges, centers &amp; other shapes; hold Alt for free move). Arrows nudge 0.1mm (Shift 1mm, Alt 0.01mm). Del removes, Ctrl+D duplicates, Ctrl+Z undoes.</div>
-</div>
-
-<div id="app">
+  </div>
+  </div>
+  <div id="app">
   <canvas id="c"></canvas>
   <div id="status"></div>
   <div id="report" hidden></div>
@@ -249,22 +463,6 @@ body.pf #dimKey{display:none}
       <button id="pfX">Cancel</button></div>
     <div id="pfHint"></div>
   </div>
-  <div id="bar">
-    <button id="undo" title="Undo (Ctrl+Z)">↶</button>
-    <button id="fitBtn" title="Fit the whole design to the screen (F)">Fit</button>
-    <button id="dimBtn" title="Show/hide dimensions (D)">Dims</button>
-    <button id="importPdf" title="Import a cutter profile from a PDF (or drop a PDF on the canvas)">Import PDF</button><input type="file" id="pdfIn" accept=".pdf,application/pdf" hidden>
-    <div id="exp"><button id="expBtn">Export ▾</button>
-      <div id="expMenu" hidden>
-        <button id="downloadSvg">SVG — cutter file</button>
-        <button id="downloadPdf">PDF — cutter file</button>
-        <button id="downloadPdfArt">PDF — multilayer spot artwork + cutter</button>
-        <button id="downloadPdfAnnotated">PDF — colour dimension sheet</button>
-        <button id="downloadA4">PDF — A4 formal sheet (client, job no., logo…)</button>
-        <button id="downloadBlueprint">PDF — A4 blueprint sheet (blue &amp; white)</button>
-        <button id="downloadSafe">PDF — cutter 1:1 + SAFE ZONE guide (A4 layout)</button>
-        <button id="downloadLayersKey">PDF — All Design Layers + Colour Key</button>
-      </div></div>
   </div>
 </div>
 
@@ -2634,7 +2832,8 @@ var qrcode = function() {
 }));
 
 </script>
-<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>\n<script>
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+<script>
 "use strict";
 const $ = id => document.getElementById(id);
 const c = $("c"), x = c.getContext("2d");
@@ -6087,6 +6286,49 @@ async function safeSheet(cutOps, safeOps, CB, margin, k, showAllLayers = false, 
 }
 artUI(); palList();
 profUI(); addUI(); readProfile();
+</script>
+<script>
+/* Workbench tabs — layout only; the app logic above is untouched. */
+(function () {
+  var shell = document.getElementById("shell");
+  var tabs = [].slice.call(document.querySelectorAll("#tabs [role=tab]"));
+  var mq = window.matchMedia("(max-width:1099px)");
+  var lastTap = 0;
+  function setTab(t) {
+    if (t === "sel" && !mq.matches) t = "profile";
+    shell.setAttribute("data-tab", t);
+    tabs.forEach(function (b) {
+      var on = b.getAttribute("data-tab") === t;
+      b.setAttribute("aria-selected", on ? "true" : "false");
+      b.tabIndex = on ? 0 : -1;
+    });
+  }
+  tabs.forEach(function (b) {
+    b.addEventListener("click", function () { setTab(b.getAttribute("data-tab")); });
+    b.addEventListener("keydown", function (e) {
+      if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+      var vis = tabs.filter(function (x) { return x.offsetParent !== null; });
+      var k = vis.indexOf(b); if (k < 0) return;
+      var n = vis[(k + (e.key === "ArrowRight" ? 1 : vis.length - 1)) % vis.length];
+      e.preventDefault(); e.stopPropagation(); setTab(n.getAttribute("data-tab")); n.focus();
+    });
+  });
+  /* On narrow screens, tapping something on the canvas opens the Selection tab. */
+  var cv = document.getElementById("c");
+  ["pointerdown", "pointerup"].forEach(function (ev) { cv.addEventListener(ev, function () { lastTap = Date.now(); }, true); });
+  var mo = new MutationObserver(function (ms) {
+    if (!mq.matches || Date.now() - lastTap > 700) return;
+    for (var i = 0; i < ms.length; i++) {
+      if (ms[i].oldValue !== null && !ms[i].target.hidden) { setTab("sel"); return; }
+    }
+  });
+  ["linePanel", "selP", "artP"].forEach(function (id) {
+    mo.observe(document.getElementById(id), { attributes: true, attributeFilter: ["hidden"], attributeOldValue: true });
+  });
+  function fix() { if (!mq.matches && shell.getAttribute("data-tab") === "sel") setTab("profile"); }
+  if (mq.addEventListener) mq.addEventListener("change", fix); else mq.addListener(fix);
+  setTab("profile");
+})();
 </script>
 </body>
 </html>
